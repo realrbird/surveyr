@@ -7,7 +7,7 @@
 #' @param wt_vec A numeric vector containing the survey weights. Must not contain \code{NA} values.
 #' @param probs A numeric vector of probabilities (between 0 and 1) at which to
 #'   compute the quantiles. Defaults to a standard set of diagnostic quantiles.
-#' @param print_all A logical flag. If \code{TRUE}, the \code{probs} argument is
+#' @param print_all A logical flag. If \code{TRUE} (default), the \code{probs} argument is
 #'   ignored and quantiles are calculated for every 1% (i.e., \code{seq(0, 1, 0.01)}).
 #'
 #' @return A \code{tibble} with two columns:
@@ -135,12 +135,10 @@ svy_stats <- function(wt_vec, conf_level = 0.95) {
   ess <- n / deff
 
   # Margin of Error (Design-Adjusted)
-  # Calculate the Z-score for the given confidence level
   alpha_half <- (1 - conf_level) / 2
   z_score <- stats::qnorm(1 - alpha_half)
 
-  # CORRECTED MOE FORMULA:
-  # MOE = Z * sqrt(0.5 * 0.5 / ESS) * 100 (for 50/50 split, expressed as percentage points)
+  # MOE formula
   moe <- z_score * 0.5 / sqrt(ess) * 100
 
   # --- 3. Format Output (Horizontal Tibble) ---
@@ -155,4 +153,216 @@ svy_stats <- function(wt_vec, conf_level = 0.95) {
   )
 
   return(result)
+}
+
+#' @title Compare Survey Frequencies to Population Targets
+#' @description Calculates the difference between survey frequencies (weighted or
+#'   unweighted) and corresponding population target percentages for multiple
+#'   demographic variables.
+#'
+#' @param data A data frame or tibble containing the survey variables.
+#' @param targets A named list of tibbles, where each tibble represents the population
+#'   targets for a variable. List names must match variable names in \code{data}.
+#' @param wt_var A **character string** (unquoted column name) in \code{data}
+#'   containing the survey weights. If \code{NULL} (the default), the comparison
+#'   uses unweighted sample frequencies.
+#'
+#' @return A single \code{tibble} that aggregates the comparison results for all
+#'   variables in \code{targets}.
+#'   \itemize{
+#'     \item If \code{wt_var} is \code{NULL}, returns 5 columns: \code{VAR}, \code{LEVEL},
+#'     \code{TARGET_PERCENT}, \code{UNWT_SAMPLE_PERCENT}, and \code{TARGET_UNWT_DIFF}.
+#'     \item If \code{wt_var} is provided, returns 7 columns, adding
+#'     \code{WT_SAMPLE_PERCENT} and \code{TARGET_WT_DIFF} to the unweighted comparison results.
+#'   }
+#'
+#' @details
+#' The resulting tibble is structured such that each row represents a category
+#' (e.g., '18-30', 'male', 'South').
+#' \describe{
+#'   \item{TARGET\_PERCENT}{The target percentage from the \code{targets} list.}
+#'   \item{UNWT\_SAMPLE\_PERCENT}{The calculated sample percentage using unweighted counts.}
+#'   \item{WT\_SAMPLE\_PERCENT}{The calculated sample percentage using the provided survey weights (only present if \code{wt_var} is not \code{NULL}).}
+#'   \item{TARGET\_UNWT\_DIFF}{The difference between target and unweighted sample frequencies.}
+#'   \item{TARGET\_WT\_DIFF}{The difference between target and weighted sample frequencies (only present if \code{wt_var} is not \code{NULL}).}
+#' }
+#'
+#' The function relies on the `targets` list being correctly structured (validated
+#' by internal checks in \code{chk_target_structure}).
+#'
+#' @importFrom rlang .data sym
+#' @importFrom dplyr count mutate select all_of bind_rows bind_cols
+#' @importFrom stats na.omit
+#'
+#' @examples
+#' # Load the package data (requires devtools::load_all() during development)
+#' if (requireNamespace("tibble", quietly = TRUE) && requireNamespace("dplyr", quietly = TRUE)) {
+#'   data("survey_df")
+#'   data("target_list")
+#'
+#'   # Weighted comparison (includes unweighted and weighted results)
+#'   svy_comps(survey_df, target_list, wt_var = "WEIGHT")
+#'
+#'   # Unweighted comparison (unweighted results only)
+#'   svy_comps(survey_df, target_list)
+#' }
+#'
+#' @export
+svy_comps <- function(data, targets, wt_var = NULL) {
+
+  # --- 1. Validation using internal helpers ---
+  # Check targets structure and alignment with data (defined in R/survey_checks.R)
+  chk_target_structure(targets, data)
+
+  # If wt_var is provided, validate it as a character string
+  if (!is.null(wt_var)) {
+    if (!is.character(wt_var) || length(wt_var) != 1) {
+      stop("`wt_var` must be a single character string representing the weight column name.", call. = FALSE)
+    }
+
+    # Check if the weight column exists in the data
+    if (!wt_var %in% names(data)) {
+      stop(paste0("Weight variable '", wt_var, "' not found in `data`."), call. = FALSE)
+    }
+
+    # Check weight vector itself for numeric and NAs using internal helper
+    chk_numeric_no_na(data[[wt_var]], arg_name = wt_var)
+  }
+
+  all_results <- list()
+
+  # --- 2. Iterate through each target variable ---
+  for (var_name in names(targets)) {
+    target_df <- targets[[var_name]]
+    var_sym <- rlang::sym(var_name)
+
+    # --- A. Calculate Unweighted Frequencies ---
+    unwt_counts <- dplyr::count(data, !!var_sym) %>%
+      stats::na.omit() %>%
+      dplyr::mutate(UNWT_SAMPLE_PERCENT = (.data$n / sum(.data$n)) * 100)
+
+    # --- B. Create Base Comparison DF (Target vs Unweighted) ---
+    # Rely on the fact that target_df levels and unwt_counts order are identical
+
+    comparison_df <- tibble::tibble(
+      VAR = var_name,
+      LEVEL = as.character(target_df[[var_name]]), # Explicitly grab the factor levels
+      TARGET_PERCENT = target_df$Freq
+    ) %>%
+      dplyr::bind_cols(
+        UNWT_SAMPLE_PERCENT = unwt_counts$UNWT_SAMPLE_PERCENT # Bind calculated percentage
+      ) %>%
+      dplyr::mutate(
+        TARGET_UNWT_DIFF = .data$TARGET_PERCENT - .data$UNWT_SAMPLE_PERCENT
+      )
+
+
+    # --- C. Handle Weighted Case (if wt_var is provided) ---
+    if (!is.null(wt_var)) {
+      wt_var_sym <- rlang::sym(wt_var)
+
+      weighted_counts <- dplyr::count(data, !!var_sym, wt = !!wt_var_sym) %>%
+        stats::na.omit() %>%
+        dplyr::mutate(WT_SAMPLE_PERCENT = (.data$n / sum(.data$n)) * 100)
+
+      # Bind weighted percentage column (relies on identical order)
+      comparison_df <- comparison_df %>%
+        dplyr::bind_cols(
+          WT_SAMPLE_PERCENT = weighted_counts$WT_SAMPLE_PERCENT
+        ) %>%
+        dplyr::mutate(
+          TARGET_WT_DIFF = .data$TARGET_PERCENT - .data$WT_SAMPLE_PERCENT
+        )
+    }
+
+    all_results[[var_name]] <- comparison_df
+  }
+
+  # --- 3. Combine all results into a single tibble ---
+  final_result <- dplyr::bind_rows(all_results)
+
+  return(final_result)
+}
+
+#' @title Comprehensive Survey Weight Diagnostics
+#' @description A wrapper function that computes and optionally prints the three
+#'   primary weight diagnostic outputs: quantiles (tiles), summary statistics (stats),
+#'   and population comparison checks (comps).
+#'
+#' @param data A data frame or tibble containing the survey variables.
+#' @param targets A named list of tibbles for population targets (see \code{svy_comps} for structure).
+#' @param wt_var A **character string** (unquoted column name) in \code{data}
+#'   containing the survey weights. This argument is required.
+#' @param print Logical. If \code{TRUE} (default), the resulting list is printed
+#'   to the console after computation, with clear headings.
+#'
+#' @return A list with three elements:
+#'   \item{tiles}{Result from \code{svy_tiles(data[[wt_var]])}.}
+#'   \item{stats}{Result from \code{svy_stats(data[[wt_var]])}.}
+#'   \item{comps}{Result from \code{svy_comps(data, targets, wt_var)}.}
+#'
+#' @examples
+#' # Load the package data (requires devtools::load_all() during development)
+#' if (requireNamespace("tibble", quietly = TRUE)) {
+#'   data("survey_df")
+#'   data("target_list")
+#'
+#'   # Run all diagnostics and print results (default)
+#'   diag_list <- svy_diagnostics(survey_df, target_list, wt_var = "WEIGHT")
+#'
+#'   # Run diagnostics without printing (just return the list)
+#'   diag_list_silent <- svy_diagnostics(survey_df, target_list, wt_var = "WEIGHT", print = FALSE)
+#' }
+#' @export
+svy_diagnostics <- function(data, targets, wt_var, print = TRUE) {
+
+  # --- 1. Basic Validation for Wt_var ---
+  # Check if wt_var is provided
+  if (is.null(wt_var)) {
+    stop("`wt_var` is required for svy_diagnostics and cannot be NULL.", call. = FALSE)
+  }
+
+  # Check if the weight column exists in the data and is correctly passed as string
+  if (!is.character(wt_var) || length(wt_var) != 1 || !wt_var %in% names(data)) {
+    stop("`wt_var` must be a single character string present in `data`.", call. = FALSE)
+  }
+
+  wt_vec <- data[[wt_var]]
+
+  # --- 2. Run Functions ---
+
+  # a) Tiles (Quantiles)
+  tiles_result <- svy_tiles(wt_vec)
+
+  # b) Stats (Summary Metrics)
+  stats_result <- svy_stats(wt_vec)
+
+  # c) Comps (Target Comparisons)
+  # Validation of targets is handled inside svy_comps
+  comps_result <- svy_comps(data, targets, wt_var = wt_var)
+
+  # --- 3. Format Output ---
+  result_list <- list(
+    tiles = tiles_result,
+    stats = stats_result,
+    comps = comps_result
+  )
+
+  # --- 4. Print and Return ---
+  if (isTRUE(print)) {
+    cat("\n--- Survey Weight Diagnostics Report (surveyr) ---\n")
+    cat("\n[1] Tiles (Weight Quantiles):\n")
+    # Print full tibble output using n=Inf
+    print(result_list$tiles, n = Inf)
+    cat("\n[2] Stats (Summary Metrics):\n")
+    # Print full tibble output using n=Inf (stats is usually 1 row, but good practice)
+    print(result_list$stats, n = Inf)
+    cat("\n[3] Comps (Target Comparisons):\n")
+    # Print full tibble output using n=Inf
+    print(result_list$comps, n = Inf)
+    cat("-----------------------------------------------\n\n")
+  }
+
+  # Return the list, invisibly if printing was done
+  return(invisible(result_list))
 }
