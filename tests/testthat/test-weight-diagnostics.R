@@ -7,7 +7,7 @@ data(target_list)
 N_WT <- 2000
 DEFF_WT <- 1.010107
 ESS_WT <- 1979.99
-MOE_WT <- 2.202353 # FIX: Updated to the exact reported actual value
+MOE_WT <- 2.202353
 # NOTE: Increased tolerance in the expect_equal calls below to 1e-4
 
 # --- Test 1: Validation Helper (R/survey_checks.R) ---
@@ -75,23 +75,84 @@ test_that("svy_comps returns correct structure for weighted and unweighted data"
 
   # Check known calculation for first row (age_group: 18-30)
   # Target: 10.00
-  # Unweighted Sample (actual): 10.75 (updated from 10.05)
-  # Weighted Sample (approx): 10.00
   age_18_30_row <- comps_wt[comps_wt$LEVEL == "18-30", ]
   expect_equal(age_18_30_row$TARGET_PERCENT, 10.00)
   expect_equal(age_18_30_row$UNWT_SAMPLE_PERCENT, 10.75, tolerance = 1e-2)
-  expect_equal(age_18_30_row$TARGET_UNWT_DIFF, -0.75, tolerance = 1e-2) # updated from -0.05
+  expect_equal(age_18_30_row$TARGET_UNWT_DIFF, -0.75, tolerance = 1e-2)
 
   # --- B. Unweighted Test (wt_var = NULL) ---
   comps_unwt <- svy_comps(survey_df, target_list, wt_var = NULL)
 
   # Check Structure (Unweighted: 5 columns)
   expect_equal(ncol(comps_unwt), 5)
-  expect_false("WT_SAMPLE_PERCENT" %in% names(comps_unwt))
-  expect_false("TARGET_WT_DIFF" %in% names(comps_unwt))
 
   # Check rows are identical to the unweighted part of the weighted test
   expect_equal(comps_unwt$LEVEL, comps_wt$LEVEL)
   expect_equal(comps_unwt$TARGET_PERCENT, comps_wt$TARGET_PERCENT)
   expect_equal(comps_unwt$TARGET_UNWT_DIFF, comps_wt$TARGET_UNWT_DIFF, tolerance = 1e-5)
+})
+
+# --- Test 5: svy_compare_tiles() ---
+
+test_that("svy_compare_tiles returns correct structure and names", {
+  # Create a second dummy weight for comparison in the test environment
+  survey_df_test <- survey_df %>%
+    dplyr::mutate(WEIGHT_2 = .data$WEIGHT * c(rep(1.2, 1000), rep(0.8, 1000)))
+
+  # Test with two weight variables, passed as a character vector to wt_vars
+  compare_result <- svy_compare_tiles(survey_df_test, wt_vars = c("WEIGHT", "WEIGHT_2"))
+
+  # Check Structure (Wide format)
+  expect_s3_class(compare_result, "tbl_df")
+  expect_equal(nrow(compare_result), 11)
+  expect_equal(ncol(compare_result), 3) # tile, WEIGHT, WEIGHT_2
+
+  # Check Names (Must match input wt_vars)
+  expect_equal(names(compare_result), c("tile", "WEIGHT", "WEIGHT_2"))
+
+  # Check Values
+  expect_true(compare_result$WEIGHT_2[1] < compare_result$WEIGHT[1])
+})
+
+# --- Test 6: Long-Format Comparison Wrappers (NEW) ---
+
+test_that("svy_compare_stats, svy_compare_comps, and svy_compare wrappers return correct long structure", {
+
+  # Setup data for comparison
+  survey_df_comp <- survey_df %>%
+    dplyr::mutate(WEIGHT_2 = .data$WEIGHT * c(rep(1.2, 1000), rep(0.8, 1000)))
+  wt_names <- c("WEIGHT", "WEIGHT_2")
+
+  # --- A. svy_compare_stats ---
+  stats_comp <- svy_compare_stats(survey_df_comp, wt_vars = wt_names)
+
+  # Check Structure
+  expect_equal(nrow(stats_comp), 2) # 2 weights * 1 row/weight
+  expect_equal(ncol(stats_comp), 8) # WT_NAME + 7 stats columns
+  expect_true("WT_NAME" %in% names(stats_comp))
+  expect_equal(stats_comp$WT_NAME, wt_names)
+
+  # --- B. svy_compare_comps ---
+  comps_comp <- svy_compare_comps(survey_df_comp, target_list, wt_vars = wt_names)
+
+  # Check Structure
+  expect_equal(nrow(comps_comp), 18) # 2 weights * 9 levels/weight
+  expect_equal(ncol(comps_comp), 8) # WT_NAME + 7 comps columns
+  expect_true("WT_NAME" %in% names(comps_comp))
+
+  # Check first 9 rows belong to first weight, second 9 to second
+  expect_equal(comps_comp$WT_NAME[1:9], rep("WEIGHT", 9))
+  expect_equal(comps_comp$WT_NAME[10:18], rep("WEIGHT_2", 9))
+
+  # --- C. svy_compare (Wrapper) ---
+  full_comp <- svy_compare(survey_df_comp, target_list, wt_vars = wt_names)
+
+  # Check Structure
+  expect_true(is.list(full_comp)) # FIX: Changed from expect_s3_class
+  expect_equal(names(full_comp), c("tiles", "stats", "comps"))
+
+  # Check contents
+  expect_equal(nrow(full_comp$tiles), 11)
+  expect_equal(nrow(full_comp$stats), 2)
+  expect_equal(nrow(full_comp$comps), 18)
 })

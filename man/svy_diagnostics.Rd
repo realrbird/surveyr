@@ -15,7 +15,7 @@ svy_diagnostics(data, targets, wt_var, print = TRUE)
 containing the survey weights. This argument is required.}
 
 \item{print}{Logical. If \code{TRUE} (default), the resulting list is printed
-to the console after computation, with clear headings.}
+to the console after computation, with clear headings and full, untruncated tibbles.}
 }
 \value{
 A list with three elements:
