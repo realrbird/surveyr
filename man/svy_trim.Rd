@@ -45,8 +45,7 @@ quantile values themselves. This function requires \code{pewmethods} to be insta
 }
 \examples{
 # Requires devtools::load_all() and the pewmethods package installed
-if (requireNamespace("pewmethods", quietly = TRUE) &&
-    requireNamespace("dplyr", quietly = TRUE)) {
+if (requireNamespace("pewmethods", quietly = TRUE) & requireNamespace("dplyr", quietly = TRUE)) {
 
   # Load the internal data
   data("survey_df")

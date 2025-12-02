@@ -2,34 +2,41 @@
 % Please edit documentation in R/weight_diagnostics.R
 \name{svy_compare_tiles}
 \alias{svy_compare_tiles}
-\title{Compare Quantiles of Multiple Weight Vectors}
+\title{Compare Weight Quantiles Across Multiple Weight Vectors}
 \usage{
-svy_compare_tiles(data, wt_vars)
+svy_compare_tiles(
+  data,
+  wt_vars,
+  probs = c(0, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 1)
+)
 }
 \arguments{
-\item{data}{A data frame or tibble containing the weight variables.}
+\item{data}{A data frame or tibble containing the survey weight variables.}
 
-\item{wt_vars}{A \strong{character vector} of column names in \code{data} to compare.
-Must be numeric vectors.}
+\item{wt_vars}{A character vector of column names in \code{data} containing the
+survey weights to be compared.}
+
+\item{probs}{A numeric vector of probabilities (between 0 and 1). Defaults to
+standard diagnostic quantiles.}
 }
 \value{
-A \code{tibble} where the first column is \code{tile} (percentile)
-and subsequent columns are the values of the quantiles for each weight
-vector, named after the input columns in \code{wt_vars}.
+A wide-format \code{tibble} with the first column being \code{tile} and
+subsequent columns named according to the input \code{wt_vars}.
 }
 \description{
-Computes the quantiles (tiles) for multiple weight vectors
-and returns a single tibble for easy side-by-side comparison.
+Calculates the specified quantiles for multiple weight vectors and
+returns them in a single wide-format tibble for easy comparison.
 }
 \examples{
-# Load the package data (requires devtools::load_all() during development)
-if (requireNamespace("tibble", quietly = TRUE)) {
+# Requires devtools::load_all()
+if (requireNamespace("tibble", quietly = TRUE) & requireNamespace("dplyr", quietly = TRUE)) {
   data("survey_df")
-
   # Create a second dummy weight for comparison
-  survey_df$WEIGHT_2 <- survey_df$WEIGHT * c(rep(1.2, 1000), rep(0.8, 1000))
+  survey_df_comp <- survey_df |>
+    dplyr::mutate(WEIGHT_2 = .data$WEIGHT * c(rep(1.2, 1000), rep(0.8, 1000)))
 
-  # Compare the two weight distributions
-  svy_compare_tiles(survey_df, wt_vars = c("WEIGHT", "WEIGHT_2"))
+  # Compare base weight to a modified weight
+  svy_compare_tiles(survey_df_comp, wt_vars = c("WEIGHT", "WEIGHT_2"))
 }
+
 }

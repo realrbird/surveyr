@@ -96,7 +96,7 @@ test_that("svy_comps returns correct structure for weighted and unweighted data"
 
 test_that("svy_compare_tiles returns correct structure and names", {
   # Create a second dummy weight for comparison in the test environment
-  survey_df_test <- survey_df %>%
+  survey_df_test <- survey_df |>
     dplyr::mutate(WEIGHT_2 = .data$WEIGHT * c(rep(1.2, 1000), rep(0.8, 1000)))
 
   # Test with two weight variables, passed as a character vector to wt_vars
@@ -119,7 +119,7 @@ test_that("svy_compare_tiles returns correct structure and names", {
 test_that("svy_compare_stats, svy_compare_comps, and svy_compare wrappers return correct long structure", {
 
   # Setup data for comparison
-  survey_df_comp <- survey_df %>%
+  survey_df_comp <- survey_df |>
     dplyr::mutate(WEIGHT_2 = .data$WEIGHT * c(rep(1.2, 1000), rep(0.8, 1000)))
   wt_names <- c("WEIGHT", "WEIGHT_2")
 

@@ -2,31 +2,26 @@
 % Please edit documentation in R/weight_diagnostics.R
 \name{svy_diagnostics}
 \alias{svy_diagnostics}
-\title{Comprehensive Survey Weight Diagnostics}
+\title{Diagnostic Wrapper for Survey Weights}
 \usage{
 svy_diagnostics(data, targets, wt_var, print = TRUE)
 }
 \arguments{
 \item{data}{A data frame or tibble containing the survey variables.}
 
-\item{targets}{A named list of tibbles for population targets (see \code{svy_comps} for structure).}
+\item{targets}{A named list of tibbles, where each tibble represents the population
+targets (required for \code{svy_comps}).}
 
-\item{wt_var}{A \strong{character string} (unquoted column name) in \code{data}
-containing the survey weights. This argument is required.}
+\item{wt_var}{A character string column name in \code{data} containing the survey weights.}
 
-\item{print}{Logical. If \code{TRUE} (default), the resulting list is printed
-to the console after computation, with clear headings and full, untruncated tibbles.}
+\item{print}{Logical. If \code{TRUE}, prints the full tibble output for diagnostics.}
 }
 \value{
-A list with three elements:
-\item{tiles}{Result from \code{svy_tiles(data[[wt_var]])}.}
-\item{stats}{Result from \code{svy_stats(data[[wt_var]])}.}
-\item{comps}{Result from \code{svy_comps(data, targets, wt_var)}.}
+A list with three elements: \code{tiles}, \code{stats}, and \code{comps}.
 }
 \description{
-A wrapper function that computes and optionally prints the three
-primary weight diagnostic outputs: quantiles (tiles), summary statistics (stats),
-and population comparison checks (comps).
+Runs \code{svy_tiles()}, \code{svy_stats()}, and \code{svy_comps()}
+and returns the results in a list. Designed for immediate weight quality assessment.
 }
 \examples{
 # Load the package data (requires devtools::load_all() during development)
@@ -34,10 +29,11 @@ if (requireNamespace("tibble", quietly = TRUE)) {
   data("survey_df")
   data("target_list")
 
-  # Run all diagnostics and print results (default)
-  diag_list <- svy_diagnostics(survey_df, target_list, wt_var = "WEIGHT")
+  # Run full diagnostics report (prints output by default)
+  report <- svy_diagnostics(survey_df, target_list, wt_var = "WEIGHT")
 
-  # Run diagnostics without printing (just return the list)
-  diag_list_silent <- svy_diagnostics(survey_df, target_list, wt_var = "WEIGHT", print = FALSE)
+  # Access specific reports
+  # report$stats
 }
+
 }

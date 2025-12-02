@@ -42,7 +42,7 @@ The formula is: $Z_{\alpha/2} \times \sqrt{0.25 / \text{ESS}} \times 100$.}
 }
 \examples{
 # Load the package data (requires devtools::load_all() during development)
-if (requireNamespace("tibble", quietly = TRUE) && requireNamespace("stats", quietly = TRUE)) {
+if (requireNamespace("tibble", quietly = TRUE) & requireNamespace("stats", quietly = TRUE)) {
   # Using the internal survey_df for demonstration
   data("survey_df")
 

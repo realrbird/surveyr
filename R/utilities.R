@@ -106,9 +106,9 @@ svy_check <- function(data, target_list, verbose = TRUE) {
 
   for (v in target_vars) {
     # CRITICAL FIX: Use .drop = FALSE to ensure levels with 0 counts are included
-    counts_df <- data %>%
-      dplyr::count(.data[[v]], .drop = FALSE) %>%
-      dplyr::mutate(cell_count = .data$n) %>%
+    counts_df <- data |>
+      dplyr::count(.data[[v]], .drop = FALSE) |>
+      dplyr::mutate(cell_count = .data$n) |>
       dplyr::filter(.data$cell_count < 10)
 
     if (nrow(counts_df) > 0) {
@@ -129,8 +129,8 @@ svy_check <- function(data, target_list, verbose = TRUE) {
 
   tryCatch({
     # Select only the target variables (factors)
-    data_for_cor <- data %>%
-      dplyr::select(dplyr::all_of(target_vars)) %>%
+    data_for_cor <- data |>
+      dplyr::select(dplyr::all_of(target_vars)) |>
       stats::na.omit()
 
     # Create dummy variables (model matrix) from the factors
@@ -159,7 +159,7 @@ svy_check <- function(data, target_list, verbose = TRUE) {
       for (i in 1:(ncol(cor_matrix) - 1)) {
         for (j in (i + 1):ncol(cor_matrix)) {
           # Check if the value is finite (required since we might still get Inf/NaN if SD is tiny)
-          if (is.finite(cor_matrix[i, j]) && abs(cor_matrix[i, j]) > correlation_threshold) {
+          if (is.finite(cor_matrix[i, j]) & abs(cor_matrix[i, j]) > correlation_threshold) {
             warn(paste0("High Correlation (>", correlation_threshold * 100, "%): Raking variables ",
                         rownames(cor_matrix)[i], " and ",
                         colnames(cor_matrix)[j],

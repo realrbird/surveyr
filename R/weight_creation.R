@@ -41,8 +41,7 @@ NULL
 #'
 #' @examples
 #' # Requires devtools::load_all() and the pewmethods package installed
-#' if (requireNamespace("pewmethods", quietly = TRUE) &&
-#'     requireNamespace("dplyr", quietly = TRUE)) {
+#' if (requireNamespace("pewmethods", quietly = TRUE) & requireNamespace("dplyr", quietly = TRUE)) {
 #'
 #'   # Load the internal data
 #'   data("survey_df")
@@ -72,14 +71,14 @@ svy_rake <- function(df, targets, base_weight = 1, print_output = TRUE, ...) {
   # Check if base_weight is a column name (character)
   if (is.character(base_weight)) {
     if (!base_weight %in% names(df)) {
-      # CRITICAL FIX: Issue a warning and fall back to numeric base weight of 1
+      # Issue a warning and fall back to numeric base weight of 1
       warning(paste0("Weight column '", base_weight, "' not found in `df`. Using base weight of 1."), call. = FALSE)
       base_weight <- 1
     } else {
       # Check weight vector itself for numeric and NAs only if the column exists
       chk_numeric_no_na(df[[base_weight]], arg_name = base_weight)
     }
-  } else if (!is.numeric(base_weight) || length(base_weight) != 1 || base_weight < 0) {
+  } else if (!is.numeric(base_weight) | length(base_weight) != 1 | base_weight < 0) {
     stop("`base_weight` must be a character string (column name) or a single non-negative numeric constant.", call. = FALSE)
   }
 
@@ -103,7 +102,7 @@ svy_rake <- function(df, targets, base_weight = 1, print_output = TRUE, ...) {
   final_weights <- df_raked
 
   # Re-create a data frame containing the weights for diagnostics
-  df_diag <- df %>%
+  df_diag <- df |>
     dplyr::mutate(RAKE_WEIGHT = final_weights)
 
   # --- 4. Print Diagnostics ---
@@ -159,8 +158,7 @@ svy_rake <- function(df, targets, base_weight = 1, print_output = TRUE, ...) {
 #'
 #' @examples
 #' # Requires devtools::load_all() and the pewmethods package installed
-#' if (requireNamespace("pewmethods", quietly = TRUE) &&
-#'     requireNamespace("dplyr", quietly = TRUE)) {
+#' if (requireNamespace("pewmethods", quietly = TRUE) & requireNamespace("dplyr", quietly = TRUE)) {
 #'
 #'   # Load the internal data
 #'   data("survey_df")
@@ -182,15 +180,15 @@ svy_trim <- function(df, wt_var, lower_quantile = 0.01, upper_quantile = 0.99, p
 
   # --- 1. Validation and Setup ---
   # Check if wt_var is character and exists
-  if (!is.character(wt_var) || length(wt_var) != 1 || !wt_var %in% names(df)) {
+  if (!is.character(wt_var) | length(wt_var) != 1 | !wt_var %in% names(df)) {
     stop("`wt_var` must be a single character string column name present in `df`.", call. = FALSE)
   }
   # Check weight vector itself for numeric and NAs
   chk_numeric_no_na(df[[wt_var]], arg_name = wt_var)
 
   # Check quantiles
-  if (!is.numeric(lower_quantile) || lower_quantile < 0 || lower_quantile >= 1 ||
-      !is.numeric(upper_quantile) || upper_quantile <= 0 || upper_quantile > 1 ||
+  if (!is.numeric(lower_quantile) | lower_quantile < 0 | lower_quantile >= 1 |
+      !is.numeric(upper_quantile) | upper_quantile <= 0 | upper_quantile > 1 |
       lower_quantile >= upper_quantile) {
     stop("Quantiles must be numeric, between 0 and 1, and lower_quantile must be less than upper_quantile.", call. = FALSE)
   }
@@ -210,12 +208,12 @@ svy_trim <- function(df, wt_var, lower_quantile = 0.01, upper_quantile = 0.99, p
   # --- 3. Run Diagnostics ---
 
   # Re-create a data frame containing the weights for diagnostics
-  df_diag <- df %>%
+  df_diag <- df |>
     dplyr::mutate(TRIM_WEIGHT = trimmed_weights)
 
   if (isTRUE(print_output)) {
     # Assuming svy_diagnostics is available internally
-    # Note: target_list needs to be available for svy_diagnostics to run svy_comps
+    # Note: target_list needs to be available for svy_comps inside svy_diagnostics
     diag_report <- svy_diagnostics(
       data = df_diag,
       targets = target_list, # Assumes target_list is loaded/available

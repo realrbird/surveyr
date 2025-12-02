@@ -47,7 +47,7 @@ by internal checks in \code{chk_target_structure}).
 }
 \examples{
 # Load the package data (requires devtools::load_all() during development)
-if (requireNamespace("tibble", quietly = TRUE) && requireNamespace("dplyr", quietly = TRUE)) {
+if (requireNamespace("tibble", quietly = TRUE) & requireNamespace("dplyr", quietly = TRUE)) {
   data("survey_df")
   data("target_list")
 

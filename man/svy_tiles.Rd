@@ -2,7 +2,7 @@
 % Please edit documentation in R/weight_diagnostics.R
 \name{svy_tiles}
 \alias{svy_tiles}
-\title{Calculate Survey Weight Quantiles}
+\title{Survey Weight Quantiles}
 \usage{
 svy_tiles(
   wt_vec,
@@ -16,7 +16,7 @@ svy_tiles(
 \item{probs}{A numeric vector of probabilities (between 0 and 1) at which to
 compute the quantiles. Defaults to a standard set of diagnostic quantiles.}
 
-\item{print_all}{A logical flag. If \code{TRUE} (default), the \code{probs} argument is
+\item{print_all}{A logical flag. If \code{TRUE}, the \code{probs} argument is
 ignored and quantiles are calculated for every 1\% (i.e., \code{seq(0, 1, 0.01)}).}
 }
 \value{

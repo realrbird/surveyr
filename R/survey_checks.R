@@ -55,7 +55,7 @@ chk_target_structure <- function(targets, data) {
       stop(paste0("Target '", var_name, "' must contain a column named 'Freq'."), call. = FALSE)
     }
     if (!is.numeric(target_df$Freq) || abs(sum(target_df$Freq) - 100) > 1e-4) {
-      stop(paste0("The 'Freq' column in target '", var_name, "' must be numeric and sum to 100."), call. = FALSE)
+      stop(paste0("The 'Freq' column in target '", var_name, "' must be numeric and sum to 100 (percentage)."), call. = FALSE)
     }
 
     # Check 5: First variable (the category column) in target is a factor

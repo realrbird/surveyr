@@ -30,21 +30,21 @@ the results in a single structured list.
 }
 \examples{
 # Load the package data (requires devtools::load_all() during development)
-if (requireNamespace("tibble", quietly = TRUE)) {
+if (requireNamespace("tibble", quietly = TRUE) & requireNamespace("dplyr", quietly = TRUE)) {
   data("survey_df")
   data("target_list")
   # Create a second dummy weight for comparison
-  survey_df <- survey_df \%>\%
+  survey_df_comp <- survey_df |>
     dplyr::mutate(WEIGHT_2 = .data$WEIGHT * c(rep(1.2, 1000), rep(0.8, 1000)))
 
   # Run full comparison report
   comparison_report <- svy_compare(
-    survey_df,
+    survey_df_comp,
     target_list,
     wt_vars = c("WEIGHT", "WEIGHT_2")
   )
   # Access specific reports
-  comparison_report$stats
+  # comparison_report$stats
 }
 
 }

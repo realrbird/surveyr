@@ -1,4 +1,4 @@
-#' @title Calculate Survey Weight Quantiles
+#' @title Survey Weight Quantiles
 #' @description Calculates and neatly formats the specified quantiles (or "tiles")
 #'   of a vector of survey weights. This is useful for diagnostic purposes,
 #'   particularly when assessing the need for weight trimming or identifying
@@ -7,7 +7,7 @@
 #' @param wt_vec A numeric vector containing the survey weights. Must not contain \code{NA} values.
 #' @param probs A numeric vector of probabilities (between 0 and 1) at which to
 #'   compute the quantiles. Defaults to a standard set of diagnostic quantiles.
-#' @param print_all A logical flag. If \code{TRUE} (default), the \code{probs} argument is
+#' @param print_all A logical flag. If \code{TRUE}, the \code{probs} argument is
 #'   ignored and quantiles are calculated for every 1% (i.e., \code{seq(0, 1, 0.01)}).
 #'
 #' @return A \code{tibble} with two columns:
@@ -41,7 +41,7 @@ svy_tiles <- function(wt_vec, probs = c(0, 0.01, 0.05, 0.10, 0.25, 0.5, 0.75, 0.
   if (isTRUE(print_all)) {
     probs_to_use <- seq(0, 1, 0.01)
   } else {
-    if (!is.numeric(probs) || any(probs < 0) || any(probs > 1)) {
+    if (!is.numeric(probs) | any(probs < 0) | any(probs > 1)) {
       stop("`probs` must be a numeric vector of values between 0 and 1.", call. = FALSE)
     }
     probs_to_use <- sort(unique(probs)) # Ensure they are sorted and unique
@@ -94,7 +94,7 @@ svy_tiles <- function(wt_vec, probs = c(0, 0.01, 0.05, 0.10, 0.25, 0.5, 0.75, 0.
 #'
 #' @examples
 #' # Load the package data (requires devtools::load_all() during development)
-#' if (requireNamespace("tibble", quietly = TRUE) && requireNamespace("stats", quietly = TRUE)) {
+#' if (requireNamespace("tibble", quietly = TRUE) & requireNamespace("stats", quietly = TRUE)) {
 #'   # Using the internal survey_df for demonstration
 #'   data("survey_df")
 #'
@@ -112,7 +112,7 @@ svy_stats <- function(wt_vec, conf_level = 0.95) {
   # Check for numeric and NA values using internal helper (from survey_checks.R)
   chk_numeric_no_na(wt_vec)
 
-  if (!is.numeric(conf_level) || length(conf_level) != 1 || conf_level <= 0 || conf_level >= 1) {
+  if (!is.numeric(conf_level) | length(conf_level) != 1 | conf_level <= 0 | conf_level >= 1) {
     stop("`conf_level` must be a single numeric value between 0 and 1.", call. = FALSE)
   }
 
@@ -191,12 +191,12 @@ svy_stats <- function(wt_vec, conf_level = 0.95) {
 #' by internal checks in \code{chk_target_structure}).
 #'
 #' @importFrom rlang .data sym
-#' @importFrom dplyr count mutate select all_of bind_rows bind_cols
+#' @importFrom dplyr count mutate select relocate bind_rows left_join all_of
 #' @importFrom stats na.omit
 #'
 #' @examples
 #' # Load the package data (requires devtools::load_all() during development)
-#' if (requireNamespace("tibble", quietly = TRUE) && requireNamespace("dplyr", quietly = TRUE)) {
+#' if (requireNamespace("tibble", quietly = TRUE) & requireNamespace("dplyr", quietly = TRUE)) {
 #'   data("survey_df")
 #'   data("target_list")
 #'
@@ -216,7 +216,7 @@ svy_comps <- function(data, targets, wt_var = NULL) {
 
   # If wt_var is provided, validate it as a character string
   if (!is.null(wt_var)) {
-    if (!is.character(wt_var) || length(wt_var) != 1) {
+    if (!is.character(wt_var) | length(wt_var) != 1) {
       stop("`wt_var` must be a single character string representing the weight column name.", call. = FALSE)
     }
 
@@ -236,44 +236,55 @@ svy_comps <- function(data, targets, wt_var = NULL) {
     target_df <- targets[[var_name]]
     var_sym <- rlang::sym(var_name)
 
-    # --- A. Calculate Unweighted Frequencies ---
-    unwt_counts <- dplyr::count(data, !!var_sym) %>%
-      stats::na.omit() %>%
-      dplyr::mutate(UNWT_SAMPLE_PERCENT = (.data$n / sum(.data$n)) * 100)
+    # --- A. Calculate Unweighted Frequencies (ALWAYS needed) ---
+    unwt_counts <- data |>
+      dplyr::count(!!var_sym, .drop = FALSE) |>
+      stats::na.omit() |>
+      dplyr::mutate(UNWT_SAMPLE_PERCENT = (.data$n / sum(.data$n)) * 100) |>
+      dplyr::select(!!var_sym, "UNWT_SAMPLE_PERCENT")
 
-    # --- B. Create Base Comparison DF (Target vs Unweighted) ---
-    # Rely on the fact that target_df levels and unwt_counts order are identical
+    # --- B. Start Comparison DF ---
 
-    comparison_df <- tibble::tibble(
-      VAR = var_name,
-      LEVEL = as.character(target_df[[var_name]]), # Explicitly grab the factor levels
-      TARGET_PERCENT = target_df$Freq
-    ) %>%
-      dplyr::bind_cols(
-        UNWT_SAMPLE_PERCENT = unwt_counts$UNWT_SAMPLE_PERCENT # Bind calculated percentage
-      ) %>%
+    comparison_df <- target_df |>
+      dplyr::select(!!var_sym, TARGET_PERCENT = "Freq") |>
+      dplyr::left_join(unwt_counts, by = var_name) |>
       dplyr::mutate(
+        VAR = var_name,
+        LEVEL = as.character(!!var_sym),
         TARGET_UNWT_DIFF = .data$TARGET_PERCENT - .data$UNWT_SAMPLE_PERCENT
       )
+    # NOTE: Do NOT drop columns yet. We need 'var_name' for the weighted join below.
 
 
     # --- C. Handle Weighted Case (if wt_var is provided) ---
     if (!is.null(wt_var)) {
       wt_var_sym <- rlang::sym(wt_var)
 
-      weighted_counts <- dplyr::count(data, !!var_sym, wt = !!wt_var_sym) %>%
-        stats::na.omit() %>%
-        dplyr::mutate(WT_SAMPLE_PERCENT = (.data$n / sum(.data$n)) * 100)
+      weighted_counts <- data |>
+        dplyr::count(!!var_sym, wt = !!wt_var_sym, .drop = FALSE) |>
+        stats::na.omit() |>
+        dplyr::mutate(WT_SAMPLE_PERCENT = (.data$n / sum(.data$n)) * 100) |>
+        dplyr::select(!!var_sym, "WT_SAMPLE_PERCENT")
 
-      # Bind weighted percentage column (relies on identical order)
-      comparison_df <- comparison_df %>%
-        dplyr::bind_cols(
-          WT_SAMPLE_PERCENT = weighted_counts$WT_SAMPLE_PERCENT
-        ) %>%
+      # Merge weighted counts and calculate difference
+      comparison_df <- comparison_df |>
+        dplyr::left_join(weighted_counts, by = var_name) |>
         dplyr::mutate(
           TARGET_WT_DIFF = .data$TARGET_PERCENT - .data$WT_SAMPLE_PERCENT
         )
     }
+
+    # --- D. Final Column Selection & Cleanup ---
+
+    # Identify which columns to keep based on whether weights were used
+    cols_to_keep <- c("VAR", "LEVEL", "TARGET_PERCENT", "UNWT_SAMPLE_PERCENT", "TARGET_UNWT_DIFF")
+    if (!is.null(wt_var)) {
+      cols_to_keep <- c(cols_to_keep, "WT_SAMPLE_PERCENT", "TARGET_WT_DIFF")
+    }
+
+    # Select and reorder columns (this drops the original var_name column used for joining)
+    comparison_df <- comparison_df |>
+      dplyr::select(dplyr::all_of(cols_to_keep))
 
     all_results[[var_name]] <- comparison_df
   }
@@ -284,22 +295,20 @@ svy_comps <- function(data, targets, wt_var = NULL) {
   return(final_result)
 }
 
-#' @title Comprehensive Survey Weight Diagnostics
-#' @description A wrapper function that computes and optionally prints the three
-#'   primary weight diagnostic outputs: quantiles (tiles), summary statistics (stats),
-#'   and population comparison checks (comps).
+#' @title Diagnostic Wrapper for Survey Weights
+#' @description Runs \code{svy_tiles()}, \code{svy_stats()}, and \code{svy_comps()}
+#'   and returns the results in a list. Designed for immediate weight quality assessment.
 #'
 #' @param data A data frame or tibble containing the survey variables.
-#' @param targets A named list of tibbles for population targets (see \code{svy_comps} for structure).
-#' @param wt_var A **character string** (unquoted column name) in \code{data}
-#'   containing the survey weights. This argument is required.
-#' @param print Logical. If \code{TRUE} (default), the resulting list is printed
-#'   to the console after computation, with clear headings and full, untruncated tibbles.
+#' @param targets A named list of tibbles, where each tibble represents the population
+#'   targets (required for \code{svy_comps}).
+#' @param wt_var A character string column name in \code{data} containing the survey weights.
+#' @param print Logical. If \code{TRUE}, prints the full tibble output for diagnostics.
 #'
-#' @return A list with three elements:
-#'   \item{tiles}{Result from \code{svy_tiles(data[[wt_var]])}.}
-#'   \item{stats}{Result from \code{svy_stats(data[[wt_var]])}.}
-#'   \item{comps}{Result from \code{svy_comps(data, targets, wt_var)}.}
+#' @return A list with three elements: \code{tiles}, \code{stats}, and \code{comps}.
+#'
+#' @importFrom rlang .data
+#' @importFrom dplyr mutate
 #'
 #' @examples
 #' # Load the package data (requires devtools::load_all() during development)
@@ -307,132 +316,117 @@ svy_comps <- function(data, targets, wt_var = NULL) {
 #'   data("survey_df")
 #'   data("target_list")
 #'
-#'   # Run all diagnostics and print results (default)
-#'   diag_list <- svy_diagnostics(survey_df, target_list, wt_var = "WEIGHT")
+#'   # Run full diagnostics report (prints output by default)
+#'   report <- svy_diagnostics(survey_df, target_list, wt_var = "WEIGHT")
 #'
-#'   # Run diagnostics without printing (just return the list)
-#'   diag_list_silent <- svy_diagnostics(survey_df, target_list, wt_var = "WEIGHT", print = FALSE)
+#'   # Access specific reports
+#'   # report$stats
 #' }
+#'
 #' @export
 svy_diagnostics <- function(data, targets, wt_var, print = TRUE) {
 
-  # --- 1. Basic Validation for Wt_var ---
-  # Check if wt_var is provided
-  if (is.null(wt_var)) {
-    stop("`wt_var` is required for svy_diagnostics and cannot be NULL.", call. = FALSE)
+  # Check if wt_var is character and exists (svy_tiles/stats will run full check)
+  if (!is.character(wt_var) | length(wt_var) != 1 | !wt_var %in% names(data)) {
+    stop("`wt_var` must be a single character string column name present in `data`.", call. = FALSE)
   }
 
-  # Check if the weight column exists in the data and is correctly passed as string
-  if (!is.character(wt_var) || length(wt_var) != 1 || !wt_var %in% names(data)) {
-    stop("`wt_var` must be a single character string present in `data`.", call. = FALSE)
-  }
-
+  # Create the weight vector
   wt_vec <- data[[wt_var]]
 
-  # --- 2. Run Functions ---
-
-  # a) Tiles (Quantiles)
+  # 1. Tiles
   tiles_result <- svy_tiles(wt_vec)
 
-  # b) Stats (Summary Metrics)
+  # 2. Stats
   stats_result <- svy_stats(wt_vec)
 
-  # c) Comps (Target Comparisons)
-  # Validation of targets is handled inside svy_comps
+  # 3. Comps
   comps_result <- svy_comps(data, targets, wt_var = wt_var)
 
-  # --- 3. Format Output ---
   result_list <- list(
     tiles = tiles_result,
     stats = stats_result,
     comps = comps_result
   )
 
-  # --- 4. Print and Return ---
   if (isTRUE(print)) {
-    cat("\n--- Survey Weight Diagnostics Report (surveyr) ---\n")
-    cat("\n[1] Tiles (Weight Quantiles):\n")
-    # Print full tibble output using n=Inf
+    cat("\n--- Survey Weight Diagnostics: ", wt_var, " ---\n")
+
+    cat("\n[1] Tiles (Quantiles):\n")
     print(result_list$tiles, n = Inf)
-    cat("\n[2] Stats (Summary Metrics):\n")
-    # Print full tibble output using n=Inf (stats is usually 1 row, but good practice)
+
+    cat("\n[2] Stats (DEFF, ESS, MOE):\n")
     print(result_list$stats, n = Inf)
-    cat("\n[3] Comps (Target Comparisons):\n")
-    # Print full tibble output using n=Inf
+
+    cat("\n[3] Comps (Target Alignment):\n")
     print(result_list$comps, n = Inf)
-    cat("-----------------------------------------------\n\n")
+    cat("---------------------------------------------\n\n")
   }
 
-  # Return the list, invisibly if printing was done
-  return(invisible(result_list))
+  return(result_list)
 }
 
-#' @title Compare Quantiles of Multiple Weight Vectors
-#' @description Computes the quantiles (tiles) for multiple weight vectors
-#'   and returns a single tibble for easy side-by-side comparison.
+#' @title Compare Weight Quantiles Across Multiple Weight Vectors
+#' @description Calculates the specified quantiles for multiple weight vectors and
+#'   returns them in a single wide-format tibble for easy comparison.
 #'
-#' @param data A data frame or tibble containing the weight variables.
-#' @param wt_vars A **character vector** of column names in \code{data} to compare.
-#'   Must be numeric vectors.
+#' @param data A data frame or tibble containing the survey weight variables.
+#' @param wt_vars A character vector of column names in \code{data} containing the
+#'   survey weights to be compared.
+#' @param probs A numeric vector of probabilities (between 0 and 1). Defaults to
+#'   standard diagnostic quantiles.
 #'
-#' @return A \code{tibble} where the first column is \code{tile} (percentile)
-#'   and subsequent columns are the values of the quantiles for each weight
-#'   vector, named after the input columns in \code{wt_vars}.
+#' @return A wide-format \code{tibble} with the first column being \code{tile} and
+#'   subsequent columns named according to the input \code{wt_vars}.
 #'
 #' @importFrom purrr map reduce
-#' @importFrom dplyr bind_cols
+#' @importFrom dplyr left_join
 #'
 #' @examples
-#' # Load the package data (requires devtools::load_all() during development)
-#' if (requireNamespace("tibble", quietly = TRUE)) {
+#' # Requires devtools::load_all()
+#' if (requireNamespace("tibble", quietly = TRUE) & requireNamespace("dplyr", quietly = TRUE)) {
 #'   data("survey_df")
-#'
 #'   # Create a second dummy weight for comparison
-#'   survey_df$WEIGHT_2 <- survey_df$WEIGHT * c(rep(1.2, 1000), rep(0.8, 1000))
+#'   survey_df_comp <- survey_df |>
+#'     dplyr::mutate(WEIGHT_2 = .data$WEIGHT * c(rep(1.2, 1000), rep(0.8, 1000)))
 #'
-#'   # Compare the two weight distributions
-#'   svy_compare_tiles(survey_df, wt_vars = c("WEIGHT", "WEIGHT_2"))
+#'   # Compare base weight to a modified weight
+#'   svy_compare_tiles(survey_df_comp, wt_vars = c("WEIGHT", "WEIGHT_2"))
 #' }
+#'
 #' @export
-svy_compare_tiles <- function(data, wt_vars) {
+svy_compare_tiles <- function(data, wt_vars, probs = c(0, 0.01, 0.05, 0.10, 0.25, 0.5, 0.75, 0.90, 0.95, 0.99, 1)) {
 
   # --- 1. Validation ---
-  if (!is.character(wt_vars) || length(wt_vars) == 0) {
-    stop("`wt_vars` must be a character vector of at least one column name.", call. = FALSE)
+  if (!is.character(wt_vars) | length(wt_vars) < 1) {
+    stop("`wt_vars` must be a character vector with at least one weight column name.", call. = FALSE)
   }
 
-  # Check if all columns exist and are numeric/non-NA
-  for (name in wt_vars) {
-    if (!name %in% names(data)) {
-      stop(paste0("Column '", name, "' not found in `data`."), call. = FALSE)
+  # Check existence and numeric status for all weight columns
+  purrr::map(wt_vars, function(var) {
+    if (!var %in% names(data)) {
+      stop(paste0("Column '", var, "' not found in `data`."), call. = FALSE)
     }
-    # Use the internal check function on the vector
-    chk_numeric_no_na(data[[name]], arg_name = name)
-  }
+    # Check vector type and NAs (assuming chk_numeric_no_na is in survey_checks.R)
+    chk_numeric_no_na(data[[var]], arg_name = var)
+  })
 
-  # --- 2. Processing ---
+  # --- 2. Calculation and Combination ---
 
-  # Function to extract the 'value' column from svy_tiles result
-  extract_tiles_value <- function(wt_vec) {
-    svy_tiles(wt_vec)$value
-  }
+  # Map svy_tiles over each weight vector
+  tile_list <- purrr::map(wt_vars, function(var) {
+    wt_vec <- data[[var]]
 
-  # Apply svy_tiles to each column and extract only the values
-  tile_values <- purrr::map(wt_vars, ~ extract_tiles_value(data[[.x]]))
+    # Run svy_tiles
+    result <- svy_tiles(wt_vec, probs = probs)
 
-  # Create the tile names column (all tile results are guaranteed to be the same)
-  tile_names <- svy_tiles(data[[wt_vars[1]]])$tile
+    # Rename the value column to the weight variable name
+    result |>
+      dplyr::select(tile, !!var := value)
+  })
 
-  # FIX: Set the names of the list elements to the input weight variable names
-  names(tile_values) <- wt_vars
-
-  # Combine the tile names and the weight values
-  result <- dplyr::bind_cols(
-    tile = tile_names,
-    tile_values
-  )
-
-  return(result)
+  # Sequentially join all results by the 'tile' column
+  purrr::reduce(tile_list, dplyr::left_join, by = "tile")
 }
 
 #' @title Compare Weight Summary Statistics Across Multiple Weight Vectors
@@ -449,36 +443,37 @@ svy_compare_tiles <- function(data, wt_vars) {
 #'   specific weight vector. It includes a \code{WT_NAME} column identifying the
 #'   weight vector source, followed by the 7 statistic columns from \code{svy_stats}.
 #'
+#' @importFrom purrr map
+#' @importFrom dplyr bind_rows mutate
+#'
 #' @examples
 #' # Load the package data (requires devtools::load_all() during development)
-#' if (requireNamespace("tibble", quietly = TRUE)) {
+#' if (requireNamespace("tibble", quietly = TRUE) & requireNamespace("dplyr", quietly = TRUE)) {
 #'   data("survey_df")
 #'   # Create a second dummy weight for comparison
-#'   survey_df <- survey_df %>%
+#'   survey_df_comp <- survey_df |>
 #'     dplyr::mutate(WEIGHT_2 = .data$WEIGHT * c(rep(1.2, 1000), rep(0.8, 1000)))
 #'
 #'   # Compare base weight to a modified weight
-#'   svy_compare_stats(survey_df, wt_vars = c("WEIGHT", "WEIGHT_2"))
+#'   svy_compare_stats(survey_df_comp, wt_vars = c("WEIGHT", "WEIGHT_2"))
 #' }
 #'
-#' @importFrom purrr map
-#' @importFrom dplyr bind_rows mutate
 #' @export
 svy_compare_stats <- function(data, wt_vars, conf_level = 0.95) {
 
   # --- 1. Validation ---
-  if (!is.character(wt_vars) || length(wt_vars) < 1) {
+  if (!is.character(wt_vars) | length(wt_vars) < 1) {
     stop("`wt_vars` must be a character vector with at least one weight column name.", call. = FALSE)
   }
 
-  # Check if all weight columns exist and are numeric (using internal check logic)
-  for (var in wt_vars) {
+  # Check existence and numeric status for all weight columns
+  purrr::map(wt_vars, function(var) {
     if (!var %in% names(data)) {
       stop(paste0("Column '", var, "' not found in `data`."), call. = FALSE)
     }
-    # Using chk_numeric_no_na to check vector type and NAs
+    # Check vector type and NAs (assuming chk_numeric_no_na is in survey_checks.R)
     chk_numeric_no_na(data[[var]], arg_name = var)
-  }
+  })
 
   # --- 2. Calculation and Combination ---
 
@@ -487,7 +482,7 @@ svy_compare_stats <- function(data, wt_vars, conf_level = 0.95) {
     wt_vec <- data[[var]]
 
     # Run svy_stats on the vector and add the weight name column
-    svy_stats(wt_vec, conf_level = conf_level) %>%
+    svy_stats(wt_vec, conf_level = conf_level) |>
       dplyr::mutate(WT_NAME = var, .before = 1)
   })
 
@@ -510,40 +505,41 @@ svy_compare_stats <- function(data, wt_vars, conf_level = 0.95) {
 #'   \code{TARGET_PERCENT}, \code{UNWT_SAMPLE_PERCENT}, \code{TARGET_UNWT_DIFF},
 #'   \code{WT_SAMPLE_PERCENT}, \code{TARGET_WT_DIFF}.
 #'
+#' @importFrom purrr map
+#' @importFrom dplyr bind_rows mutate
+#'
 #' @examples
 #' # Load the package data (requires devtools::load_all() during development)
-#' if (requireNamespace("tibble", quietly = TRUE)) {
+#' if (requireNamespace("tibble", quietly = TRUE) & requireNamespace("dplyr", quietly = TRUE)) {
 #'   data("survey_df")
 #'   data("target_list")
 #'   # Create a second dummy weight for comparison
-#'   survey_df <- survey_df %>%
+#'   survey_df_comp <- survey_df |>
 #'     dplyr::mutate(WEIGHT_2 = .data$WEIGHT * c(rep(1.2, 1000), rep(0.8, 1000)))
 #'
 #'   # Compare base weight to a modified weight
-#'   svy_compare_comps(survey_df, target_list, wt_vars = c("WEIGHT", "WEIGHT_2"))
+#'   svy_compare_comps(survey_df_comp, target_list, wt_vars = c("WEIGHT", "WEIGHT_2"))
 #' }
 #'
-#' @importFrom purrr map
-#' @importFrom dplyr bind_rows mutate
 #' @export
 svy_compare_comps <- function(data, targets, wt_vars) {
 
   # --- 1. Validation ---
-  if (!is.character(wt_vars) || length(wt_vars) < 1) {
+  if (!is.character(wt_vars) | length(wt_vars) < 1) {
     stop("`wt_vars` must be a character vector with at least one weight column name.", call. = FALSE)
   }
 
   # Check targets structure and alignment with data (defined in R/survey_checks.R)
   chk_target_structure(targets, data)
 
-  # Check if all weight columns exist and are numeric (using internal check logic)
-  for (var in wt_vars) {
+  # Check existence and numeric status for all weight columns
+  purrr::map(wt_vars, function(var) {
     if (!var %in% names(data)) {
       stop(paste0("Column '", var, "' not found in `data`."), call. = FALSE)
     }
-    # Using chk_numeric_no_na to check vector type and NAs
+    # Check vector type and NAs (assuming chk_numeric_no_na is in survey_checks.R)
     chk_numeric_no_na(data[[var]], arg_name = var)
-  }
+  })
 
   # --- 2. Calculation and Combination ---
 
@@ -552,7 +548,7 @@ svy_compare_comps <- function(data, targets, wt_vars) {
 
     # Run svy_comps on the vector (always returns 7 columns)
     # Note: svy_comps performs all the necessary weighted calculations internally
-    svy_comps(data, targets, wt_var = var) %>%
+    svy_comps(data, targets, wt_var = var) |>
       dplyr::mutate(WT_NAME = var, .before = 1)
   })
 
@@ -579,21 +575,21 @@ svy_compare_comps <- function(data, targets, wt_vars) {
 #'
 #' @examples
 #' # Load the package data (requires devtools::load_all() during development)
-#' if (requireNamespace("tibble", quietly = TRUE)) {
+#' if (requireNamespace("tibble", quietly = TRUE) & requireNamespace("dplyr", quietly = TRUE)) {
 #'   data("survey_df")
 #'   data("target_list")
 #'   # Create a second dummy weight for comparison
-#'   survey_df <- survey_df %>%
+#'   survey_df_comp <- survey_df |>
 #'     dplyr::mutate(WEIGHT_2 = .data$WEIGHT * c(rep(1.2, 1000), rep(0.8, 1000)))
 #'
 #'   # Run full comparison report
 #'   comparison_report <- svy_compare(
-#'     survey_df,
+#'     survey_df_comp,
 #'     target_list,
 #'     wt_vars = c("WEIGHT", "WEIGHT_2")
 #'   )
 #'   # Access specific reports
-#'   comparison_report$stats
+#'   # comparison_report$stats
 #' }
 #'
 #' @export
@@ -618,4 +614,3 @@ svy_compare <- function(data, targets, wt_vars, conf_level = 0.95) {
     comps = comps_comp
   ))
 }
-

@@ -23,7 +23,7 @@ test_that("svy_rake creates valid weights and hits targets", {
 
   # Check 2: Functional Outcome (Target Achievement)
   # Raking should make target differences extremely close to zero.
-  df_raked <- df_unweighted %>%
+  df_raked <- df_unweighted |>
     dplyr::mutate(RAKE_WEIGHT = raked_weights)
 
   diag_comps <- svy_comps(df_raked, target_list, wt_var = "RAKE_WEIGHT")
@@ -87,7 +87,7 @@ test_that("svy_trim returns valid weights and reduces variance", {
 
   # Check 3: DEFF Improvement
   # Trimming should result in an improved (lower) DEFF, which means higher ESS.
-  df_trimmed <- survey_df %>%
+  df_trimmed <- survey_df |>
     dplyr::mutate(TRIM_WEIGHT = trimmed_weights)
 
   trimmed_stats <- svy_stats(df_trimmed$TRIM_WEIGHT)

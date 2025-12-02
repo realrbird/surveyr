@@ -40,8 +40,7 @@ which handles a numeric default of \code{1} or a character string column name.
 }
 \examples{
 # Requires devtools::load_all() and the pewmethods package installed
-if (requireNamespace("pewmethods", quietly = TRUE) &&
-    requireNamespace("dplyr", quietly = TRUE)) {
+if (requireNamespace("pewmethods", quietly = TRUE) & requireNamespace("dplyr", quietly = TRUE)) {
 
   # Load the internal data
   data("survey_df")
