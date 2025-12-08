@@ -106,3 +106,39 @@ test_that("svy_trim handles invalid input and bounds", {
   expect_error(svy_trim(survey_df, "WEIGHT", lower_quantile = 1.2), "Quantiles must be numeric")
   expect_error(svy_trim(survey_df, "WEIGHT", lower_quantile = 0.9, upper_quantile = 0.5), "lower_quantile must be less than upper_quantile")
 })
+
+# --- Test 3: svy_rake_with_trim() Functionality (NEW) ---
+
+test_that("svy_rake_with_trim iterates and respects strict caps", {
+
+  # Run iterative raking with a TIGHT cap to force trimming activity.
+  # Normal weights are ~1.0. Max is ~1.10.
+  # We cap at 1.05 to ensure the trimming logic inside the loop actually fires.
+  final_weights <- svy_rake_with_trim(
+    df = survey_df,
+    targets = target_list,
+    base_weight = 1,
+    min_weight = 0.5,
+    max_weight = 1.05, # Strict cap
+    max_iter = 3,      # Short loop for testing
+    print_output = FALSE
+  )
+
+  # Check 1: Return Type
+  expect_type(final_weights, "double")
+  expect_length(final_weights, N_SAMPLE)
+
+  # Check 2: Caps Respected
+  # Verify no weight exceeds the strict max_weight we set
+  expect_true(max(final_weights) <= 1.05 + 1e-5) # Tolerance for floating point
+  expect_true(min(final_weights) >= 0.5 - 1e-5)
+
+  # Check 3: Target Alignment
+  # Even with strict caps, alignment should be reasonable (though maybe not perfect)
+  df_iter <- survey_df |> dplyr::mutate(ITER_WEIGHT = final_weights)
+  diag_iter <- svy_comps(df_iter, target_list, wt_var = "ITER_WEIGHT")
+
+  # Sum of absolute differences should be low
+  abs_diff_sum <- sum(abs(diag_iter$TARGET_WT_DIFF))
+  expect_lt(abs_diff_sum, 1.0) # Allow slightly more deviance due to strict trimming caps
+})

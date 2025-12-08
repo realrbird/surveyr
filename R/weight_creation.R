@@ -237,3 +237,164 @@ svy_trim <- function(df, wt_var, lower_quantile = 0.01, upper_quantile = 0.99, p
   # --- 4. Final Return ---
   return(trimmed_weights)
 }
+
+#' @title Iterative Raking and Trimming
+#' @description Performs an iterative process of raking (to population targets) and
+#'   trimming (to specific caps or quantiles) until the weights stabilize or the
+#'   maximum number of iterations is reached. This replicates the logic of common
+#'   SPSS raking macros.
+#'
+#' @param df A data frame or tibble containing the survey variables.
+#' @param targets A named list of tibbles containing the population targets (see \code{svy_rake}).
+#' @param base_weight A character string for the column in \code{df} containing the
+#'   initial weights, or a numeric constant (e.g., \code{1}) for unweighted data.
+#' @param max_iter The maximum number of rake-trim-rescale iterations to perform. Defaults to 10.
+#' @param lower_quantile The lower quantile for trimming (passed to \code{svy_trim}). Defaults to 0.01.
+#' @param upper_quantile The upper quantile for trimming (passed to \code{svy_trim}). Defaults to 0.99.
+#' @param min_weight An optional absolute lower cap for weights (passed to \code{pewmethods::trim_weights} as \code{minval}).
+#'   If provided, overrides \code{lower_quantile}.
+#' @param max_weight An optional absolute upper cap for weights (passed to \code{pewmethods::trim_weights} as \code{maxval}).
+#'   If provided, overrides \code{upper_quantile}.
+#' @param print_output A logical flag. If \code{TRUE}, prints the final diagnostics.
+#'
+#' @return A **numeric vector** containing the final iteratively raked and trimmed weights.
+#'
+#' @details
+#' The algorithm loop is:
+#' 1. **Rake** to targets (using \code{svy_rake}).
+#' 2. **Trim** weights (using \code{svy_trim}).
+#' 3. **Rescale** trimmed weights to match the sum of the weights from step 1.
+#' 4. Repeat until \code{max_iter} is reached or weights converge (not yet implemented).
+#'
+#' @examples
+#' # Requires devtools::load_all()
+#' if (requireNamespace("pewmethods", quietly = TRUE) && requireNamespace("dplyr", quietly = TRUE)) {
+#'   data("survey_df")
+#'   data("target_list")
+#'
+#'   # Run iterative raking with strict caps (0.5 to 5.0)
+#'   final_w <- svy_rake_with_trim(
+#'     survey_df,
+#'     target_list,
+#'     base_weight = 1,
+#'     min_weight = 0.2,
+#'     max_weight = 5.0,
+#'     max_iter = 5
+#'   )
+#' }
+#'
+#' @export
+svy_rake_with_trim <- function(df,
+                               targets,
+                               base_weight = 1,
+                               max_iter = 10,
+                               lower_quantile = 0.01,
+                               upper_quantile = 0.99,
+                               min_weight = NULL,
+                               max_weight = NULL,
+                               print_output = TRUE) {
+
+  # --- 1. Validation Checks (Using existing utilities) ---
+  chk_target_structure(targets, df)
+
+  # Initialize the working weight
+  # We need a temporary column name in the data frame to pass to svy_trim/svy_rake
+  temp_wt_col <- "INTERNAL_ITER_WEIGHT"
+
+  # Setup initial weight vector
+  if (is.character(base_weight)) {
+    current_weights <- df[[base_weight]]
+  } else {
+    current_weights <- rep(base_weight, nrow(df))
+  }
+
+  # Add to dataframe for processing
+  df_iter <- df |> dplyr::mutate(!!temp_wt_col := current_weights)
+
+  cat(crayon::style(paste0("\n--- Starting Iterative Raking (Max Iter: ", max_iter, ") ---\n"), "bold"))
+
+  for (i in 1:max_iter) {
+
+    # --- Step A: Rake ---
+    # Rake the current weights to targets
+    # Note: We pass print_output=FALSE to suppress intermediate spam
+    raked_weights <- svy_rake(
+      df = df_iter,
+      targets = targets,
+      base_weight = temp_wt_col,
+      print_output = FALSE
+    )
+
+    # Store the Total Sum of Weights (Target Sum) BEFORE trimming
+    target_sum <- sum(raked_weights)
+
+    # Update DF with raked weights for trimming step
+    df_iter[[temp_wt_col]] <- raked_weights
+
+    # --- Step B: Trim ---
+    # Determine arguments for trimming. If min/max_weight are provided, they override quantiles.
+    trim_args <- list(
+      df = df_iter,
+      wt_var = temp_wt_col,
+      print_output = FALSE
+    )
+
+    if (!is.null(min_weight)) trim_args$minval <- min_weight
+    if (!is.null(max_weight)) trim_args$maxval <- max_weight
+
+    # Only use quantiles if absolute caps are NOT provided (pewmethods priority)
+    # Actually, svy_trim defaults 0.01/0.99. We pass them explicitly if caps aren't set.
+    # To disable quantile trimming when caps are used, we can pass 0 and 1.
+    if (!is.null(min_weight) || !is.null(max_weight)) {
+      trim_args$lower_quantile <- 0
+      trim_args$upper_quantile <- 1
+    } else {
+      trim_args$lower_quantile <- lower_quantile
+      trim_args$upper_quantile <- upper_quantile
+    }
+
+    # Call svy_trim using do.call to handle dynamic arguments
+    trimmed_weights <- do.call(svy_trim, trim_args)
+
+    # --- Step C: Rescale ---
+    # Trimming reduces the total sum. We must scale back up to 'target_sum'.
+    trimmed_sum <- sum(trimmed_weights)
+    rescaling_factor <- target_sum / trimmed_sum
+
+    final_iter_weights <- trimmed_weights * rescaling_factor
+
+    # Update DF for next iteration
+    df_iter[[temp_wt_col]] <- final_iter_weights
+
+    # (Optional) Check convergence could go here
+    # For now, we run the fixed number of iterations requested
+    cat(".")
+  }
+  cat("\n")
+
+  # --- Final Output ---
+  final_weights <- df_iter[[temp_wt_col]]
+
+  if (isTRUE(print_output)) {
+    # Run final diagnostics
+    diag_report <- svy_diagnostics(
+      data = df_iter,
+      targets = targets,
+      wt_var = temp_wt_col,
+      print = FALSE
+    )
+
+    cat("\n--- Iterative Raking Final Report ---\n")
+    cat("\n[1] Tiles (Quantiles):\n")
+    print(diag_report$tiles, n = Inf)
+
+    cat("\n[2] Stats (DEFF, ESS, MOE):\n")
+    print(diag_report$stats, n = Inf)
+
+    cat("\n[3] Comps (Target Alignment):\n")
+    print(diag_report$comps, n = Inf)
+    cat("-------------------------------------\n\n")
+  }
+
+  return(final_weights)
+}
