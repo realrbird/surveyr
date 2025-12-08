@@ -58,7 +58,7 @@ The algorithm loop is:
 }
 \examples{
 # Requires devtools::load_all()
-if (requireNamespace("pewmethods", quietly = TRUE) && requireNamespace("dplyr", quietly = TRUE)) {
+if (requireNamespace("pewmethods", quietly = TRUE) & requireNamespace("dplyr", quietly = TRUE)) {
   data("survey_df")
   data("target_list")
 

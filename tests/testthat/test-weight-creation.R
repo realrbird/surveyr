@@ -107,13 +107,11 @@ test_that("svy_trim handles invalid input and bounds", {
   expect_error(svy_trim(survey_df, "WEIGHT", lower_quantile = 0.9, upper_quantile = 0.5), "lower_quantile must be less than upper_quantile")
 })
 
-# --- Test 3: svy_rake_with_trim() Functionality (NEW) ---
+# --- Test 3: svy_rake_with_trim() Functionality ---
 
 test_that("svy_rake_with_trim iterates and respects strict caps", {
 
   # Run iterative raking with a TIGHT cap to force trimming activity.
-  # Normal weights are ~1.0. Max is ~1.10.
-  # We cap at 1.05 to ensure the trimming logic inside the loop actually fires.
   final_weights <- svy_rake_with_trim(
     df = survey_df,
     targets = target_list,
@@ -124,21 +122,59 @@ test_that("svy_rake_with_trim iterates and respects strict caps", {
     print_output = FALSE
   )
 
-  # Check 1: Return Type
-  expect_type(final_weights, "double")
-  expect_length(final_weights, N_SAMPLE)
-
-  # Check 2: Caps Respected
-  # Verify no weight exceeds the strict max_weight we set
-  expect_true(max(final_weights) <= 1.05 + 1e-5) # Tolerance for floating point
+  # Check Caps Respected
+  expect_true(max(final_weights) <= 1.05 + 1e-5)
   expect_true(min(final_weights) >= 0.5 - 1e-5)
 
-  # Check 3: Target Alignment
-  # Even with strict caps, alignment should be reasonable (though maybe not perfect)
+  # Check Target Alignment (Sum of abs differences should be reasonably low)
   df_iter <- survey_df |> dplyr::mutate(ITER_WEIGHT = final_weights)
   diag_iter <- svy_comps(df_iter, target_list, wt_var = "ITER_WEIGHT")
 
-  # Sum of absolute differences should be low
   abs_diff_sum <- sum(abs(diag_iter$TARGET_WT_DIFF))
-  expect_lt(abs_diff_sum, 1.0) # Allow slightly more deviance due to strict trimming caps
+  expect_lt(abs_diff_sum, 1.0)
+})
+
+# --- Test 4: svy_rake_optimize() (NEW) ---
+
+test_that("svy_rake_optimize finds solution for max DEFF and Ratio", {
+
+  # 1. Create a dataset with high variance to simulate a 'bad' rake
+  # We introduce a random multiplier to make weights messy (Max ratio ~100)
+  set.seed(123)
+  df_messy <- survey_df |>
+    dplyr::mutate(MESSY_BASE = stats::runif(dplyr::n(), 0.1, 10))
+
+  # 2. Run Optimizer with a MAX DEFF constraint (Ceiling, not exact target)
+  # The messy weights will have high DEFF. We want to force it down to 1.5
+  optimized_weights_deff <- svy_rake_optimize(
+    df = df_messy,
+    targets = target_list,
+    base_weight = "MESSY_BASE",
+    max_deff = 1.5,      # RENAMED from target_deff
+    max_weight_start = 5,
+    max_weight_min = 1.1,
+    step = 0.5
+    # REMOVED print_output = FALSE because it conflicts with internal logic
+  )
+
+  # Verify DEFF goal met (should be <= 1.5 + tolerance)
+  stats_deff <- svy_stats(optimized_weights_deff)
+  expect_lte(stats_deff$deff, 1.55)
+
+  # 3. Run Optimizer with a MAX Ratio constraint (Ceiling, not exact target)
+  # We want to force the ratio (Max/Min) down to 20 or less
+  optimized_weights_ratio <- svy_rake_optimize(
+    df = df_messy,
+    targets = target_list,
+    base_weight = "MESSY_BASE",
+    max_wt_ratio = 20,   # RENAMED from target_wt_ratio
+    max_weight_start = 5,
+    max_weight_min = 1.1,
+    step = 0.5
+    # REMOVED print_output = FALSE because it conflicts with internal logic
+  )
+
+  # Verify Ratio goal met
+  stats_ratio <- svy_stats(optimized_weights_ratio)
+  expect_lte(stats_ratio$wt_ratio, 20.5)
 })

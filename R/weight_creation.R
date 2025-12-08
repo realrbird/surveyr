@@ -268,7 +268,7 @@ svy_trim <- function(df, wt_var, lower_quantile = 0.01, upper_quantile = 0.99, p
 #'
 #' @examples
 #' # Requires devtools::load_all()
-#' if (requireNamespace("pewmethods", quietly = TRUE) && requireNamespace("dplyr", quietly = TRUE)) {
+#' if (requireNamespace("pewmethods", quietly = TRUE) & requireNamespace("dplyr", quietly = TRUE)) {
 #'   data("survey_df")
 #'   data("target_list")
 #'
@@ -394,6 +394,76 @@ svy_rake_with_trim <- function(df,
     cat("\n[3] Comps (Target Alignment):\n")
     print(diag_report$comps, n = Inf)
     cat("-------------------------------------\n\n")
+  }
+
+  return(final_weights)
+}
+
+#' @title Optimize Raking Caps to Achieve Target Statistics
+#' @description Automates the process of finding the best weight trimming caps to
+#'   achieve a specific Design Effect (DEFF) or Weight Ratio, while maintaining
+#'   target alignment as much as possible.
+#'
+#' @param df A data frame or tibble containing the survey variables.
+#' @param targets A named list of tibbles containing the population targets.
+#' @param max_deff Numeric. The maximum allowable Design Effect (Kish). The function
+#'   will iteratively tighten the upper weight cap until this threshold is met.
+#' @param max_wt_ratio Numeric. The maximum allowable Weight Ratio (Max/Min).
+#'   The function will iteratively tighten the caps until this threshold is met.
+#' @param step Numeric. The step size for reducing the max_weight cap in each
+#'   iteration. Defaults to 0.1.
+#' @param max_weight_start Numeric. The starting upper cap for weights. Defaults to 5.0.
+#' @param max_weight_min Numeric. The floor for the upper cap (safety stop). Defaults to 1.5.
+#' @param ... Additional arguments passed to \code{svy_rake_with_trim}.
+#'
+#' @return A **numeric vector** containing the optimized weights.
+#'
+#' @export
+svy_rake_optimize <- function(df, targets, max_deff = NULL, max_wt_ratio = NULL,
+                              step = 0.1, max_weight_start = 5.0, max_weight_min = 1.5, ...) {
+
+  current_cap <- max_weight_start
+  found_solution <- FALSE
+  final_weights <- NULL
+
+  cat(crayon::style("\n--- Starting Optimization Search ---\n", "bold"))
+
+  # Loop downward from the start cap to the minimum cap
+  while (current_cap >= max_weight_min) {
+
+    # Run the iterative rake with the current cap
+    # We suppress output here to avoid spamming the console 50 times
+    wts <- svy_rake_with_trim(
+      df = df,
+      targets = targets,
+      max_weight = current_cap,
+      print_output = FALSE,
+      ...
+    )
+
+    # Calculate stats for this trial
+    stats <- svy_stats(wts)
+
+    # Check constraints
+    deff_ok <- is.null(max_deff) || (stats$deff <= max_deff)
+    ratio_ok <- is.null(max_wt_ratio) || (stats$wt_ratio <= max_wt_ratio)
+
+    if (deff_ok && ratio_ok) {
+      cat(crayon::green(paste0("✓ Solution Found! Cap: ", current_cap, " | DEFF: ", round(stats$deff, 2), " | Ratio: ", round(stats$wt_ratio, 2), "\n")))
+      final_weights <- wts
+      found_solution <- TRUE
+      break
+    } else {
+      # cat(paste0("... Cap ", current_cap, " too loose (DEFF: ", round(stats$deff, 2), ")\n"))
+    }
+
+    # Decrement cap for next try
+    current_cap <- current_cap - step
+  }
+
+  if (!found_solution) {
+    warning("Could not satisfy constraints even at minimum weight cap. Returning weights from lowest cap.", call. = FALSE)
+    final_weights <- wts # Return the last attempt (strictest cap)
   }
 
   return(final_weights)
