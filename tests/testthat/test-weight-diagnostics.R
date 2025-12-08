@@ -114,7 +114,7 @@ test_that("svy_compare_tiles returns correct structure and names", {
   expect_true(compare_result$WEIGHT_2[1] < compare_result$WEIGHT[1])
 })
 
-# --- Test 6: Long-Format Comparison Wrappers (NEW) ---
+# --- Test 6: Long-Format Comparison Wrappers (Single Dataset) ---
 
 test_that("svy_compare_stats, svy_compare_comps, and svy_compare wrappers return correct long structure", {
 
@@ -148,11 +148,65 @@ test_that("svy_compare_stats, svy_compare_comps, and svy_compare wrappers return
   full_comp <- svy_compare(survey_df_comp, target_list, wt_vars = wt_names)
 
   # Check Structure
-  expect_true(is.list(full_comp)) # FIX: Changed from expect_s3_class
+  expect_true(is.list(full_comp))
   expect_equal(names(full_comp), c("tiles", "stats", "comps"))
 
   # Check contents
   expect_equal(nrow(full_comp$tiles), 11)
   expect_equal(nrow(full_comp$stats), 2)
   expect_equal(nrow(full_comp$comps), 18)
+})
+
+# --- Test 7: svy_contrast() (Multi-Dataset) (NEW) ---
+
+test_that("svy_contrast aggregates results from multiple datasets correctly", {
+
+  # 1. Setup two mock datasets
+  # Wave 2 has slightly shifted weights
+  df_w2 <- survey_df |> dplyr::mutate(WEIGHT = WEIGHT * 1.1)
+
+  input_w1 <- list(
+    dataset_name = "Wave 1",
+    data = survey_df,
+    wt_var = "WEIGHT",
+    target_list = target_list
+  )
+
+  input_w2 <- list(
+    dataset_name = "Wave 2",
+    data = df_w2,
+    wt_var = "WEIGHT",
+    target_list = target_list
+  )
+
+  # 2. Run svy_contrast
+  contrast_res <- svy_contrast(input_w1, input_w2, print = FALSE)
+
+  # 3. Check Return Type
+  expect_type(contrast_res, "list")
+  expect_named(contrast_res, c("tiles", "stats", "comps"))
+
+  # 4. Check Tiles (Wide Format)
+  # Should have: tile, Wave 1, Wave 2
+  expect_true("tile" %in% names(contrast_res$tiles))
+  expect_true("Wave 1" %in% names(contrast_res$tiles))
+  expect_true("Wave 2" %in% names(contrast_res$tiles))
+  expect_equal(nrow(contrast_res$tiles), 11)
+
+  # 5. Check Stats (Long Format)
+  # Should have DATASET column
+  expect_true("DATASET" %in% names(contrast_res$stats))
+  expect_equal(nrow(contrast_res$stats), 2)
+  expect_equal(contrast_res$stats$DATASET, c("Wave 1", "Wave 2"))
+
+  # 6. Check Comps (Long Format)
+  expect_true("DATASET" %in% names(contrast_res$comps))
+  # 9 rows per wave * 2 waves = 18 rows
+  expect_equal(nrow(contrast_res$comps), 18)
+
+  # 7. Test Error Handling
+  # Pass a bad list (missing dataset_name)
+  bad_input <- input_w1
+  bad_input$dataset_name <- NULL
+  expect_error(svy_contrast(bad_input, input_w2), "must have a 'dataset_name' string")
 })

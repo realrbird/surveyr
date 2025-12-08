@@ -241,19 +241,23 @@ svy_comps <- function(data, targets, wt_var = NULL) {
       dplyr::count(!!var_sym, .drop = FALSE) |>
       stats::na.omit() |>
       dplyr::mutate(UNWT_SAMPLE_PERCENT = (.data$n / sum(.data$n)) * 100) |>
-      dplyr::select(!!var_sym, "UNWT_SAMPLE_PERCENT")
+      dplyr::select(dplyr::all_of(var_name), "UNWT_SAMPLE_PERCENT") # Fix: Use explicit string name and all_of for join var
 
     # --- B. Start Comparison DF ---
 
     comparison_df <- target_df |>
-      dplyr::select(!!var_sym, TARGET_PERCENT = "Freq") |>
+      dplyr::select(dplyr::all_of(var_name), TARGET_PERCENT = "Freq") |> # Fix: Use explicit string name
+
+      # Join with unweighted counts
       dplyr::left_join(unwt_counts, by = var_name) |>
+
       dplyr::mutate(
         VAR = var_name,
         LEVEL = as.character(!!var_sym),
         TARGET_UNWT_DIFF = .data$TARGET_PERCENT - .data$UNWT_SAMPLE_PERCENT
       )
-    # NOTE: Do NOT drop columns yet. We need 'var_name' for the weighted join below.
+    # FIX: DO NOT SELECT/DROP COLUMNS HERE.
+    # We need 'var_name' column to persist for the weighted join in step C.
 
 
     # --- C. Handle Weighted Case (if wt_var is provided) ---
@@ -264,25 +268,28 @@ svy_comps <- function(data, targets, wt_var = NULL) {
         dplyr::count(!!var_sym, wt = !!wt_var_sym, .drop = FALSE) |>
         stats::na.omit() |>
         dplyr::mutate(WT_SAMPLE_PERCENT = (.data$n / sum(.data$n)) * 100) |>
-        dplyr::select(!!var_sym, "WT_SAMPLE_PERCENT")
+        dplyr::select(dplyr::all_of(var_name), "WT_SAMPLE_PERCENT") # Fix: Use explicit string name
 
       # Merge weighted counts and calculate difference
       comparison_df <- comparison_df |>
+        # Now this join will work because 'var_name' column still exists in comparison_df
         dplyr::left_join(weighted_counts, by = var_name) |>
+
         dplyr::mutate(
           TARGET_WT_DIFF = .data$TARGET_PERCENT - .data$WT_SAMPLE_PERCENT
         )
     }
 
-    # --- D. Final Column Selection & Cleanup ---
+    # --- D. Final Column Selection ---
 
-    # Identify which columns to keep based on whether weights were used
+    # Define columns to keep
     cols_to_keep <- c("VAR", "LEVEL", "TARGET_PERCENT", "UNWT_SAMPLE_PERCENT", "TARGET_UNWT_DIFF")
+
     if (!is.null(wt_var)) {
       cols_to_keep <- c(cols_to_keep, "WT_SAMPLE_PERCENT", "TARGET_WT_DIFF")
     }
 
-    # Select and reorder columns (this drops the original var_name column used for joining)
+    # Final cleanup of columns using string selection
     comparison_df <- comparison_df |>
       dplyr::select(dplyr::all_of(cols_to_keep))
 
@@ -613,4 +620,148 @@ svy_compare <- function(data, targets, wt_vars, conf_level = 0.95) {
     stats = stats_comp,
     comps = comps_comp
   ))
+}
+
+#' @title Compare Survey Weights Across Different Datasets
+#' @description Diagnoses and compares survey weights from multiple different datasets
+#'   (e.g., Wave 1 vs Wave 2) by aggregating \code{svy_diagnostics} results.
+#'
+#' @param ... Named or unnamed list objects, where each list represents a dataset to compare.
+#'   Each input list must contain the following named elements:
+#'   \itemize{
+#'     \item \code{dataset_name}: A string identifying the dataset (e.g., "Wave 1").
+#'     \item \code{data}: The data frame or tibble.
+#'     \item \code{wt_var}: A string for the weight column name in \code{data}.
+#'     \item \code{target_list}: (Optional) The target list for \code{svy_comps}.
+#'   }
+#' @param print Logical. If \code{TRUE}, prints the aggregated diagnostic report.
+#'
+#' @return A list with three elements (\code{tiles}, \code{stats}, \code{comps})
+#'   containing the combined diagnostic results.
+#'
+#' @examples
+#' # Load package data
+#' if (requireNamespace("tibble", quietly = TRUE)) {
+#'   data("survey_df")
+#'   data("target_list")
+#'
+#'   # Simulate a second wave of data
+#'   survey_df_w2 <- survey_df
+#'   survey_df_w2$WEIGHT <- survey_df$WEIGHT * 1.1 # Shift weights slightly
+#'
+#'   # Define inputs
+#'   input_w1 <- list(
+#'     dataset_name = "Wave 1",
+#'     data = survey_df,
+#'     wt_var = "WEIGHT",
+#'     target_list = target_list
+#'   )
+#'
+#'   input_w2 <- list(
+#'     dataset_name = "Wave 2",
+#'     data = survey_df_w2,
+#'     wt_var = "WEIGHT",
+#'     target_list = target_list
+#'   )
+#'
+#'   # Run contrast
+#'   # contrast <- svy_contrast(input_w1, input_w2)
+#' }
+#'
+#' @export
+svy_contrast <- function(..., print = TRUE) {
+
+  inputs <- list(...)
+
+  if (length(inputs) == 0) {
+    stop("At least one input list must be provided.", call. = FALSE)
+  }
+
+  # --- 1. Validation & Processing Loop ---
+
+  diagnostics_list <- purrr::map(inputs, function(item) {
+
+    # Check keys
+    if (is.null(item$dataset_name) || !is.character(item$dataset_name)) {
+      stop("Each input list must have a 'dataset_name' string.", call. = FALSE)
+    }
+    if (is.null(item$data) || !is.data.frame(item$data)) {
+      stop(paste0("Input '", item$dataset_name, "' is missing 'data' or it is not a data frame."), call. = FALSE)
+    }
+    if (is.null(item$wt_var) || !is.character(item$wt_var)) {
+      stop(paste0("Input '", item$dataset_name, "' is missing 'wt_var' string."), call. = FALSE)
+    }
+    if (is.null(item$target_list) || !is.list(item$target_list)) {
+      stop(paste0("Input '", item$dataset_name, "' is missing 'target_list'."), call. = FALSE)
+    }
+
+    # Run diagnostics internally
+    # We suppress printing because we will aggregate later
+    res <- svy_diagnostics(
+      data = item$data,
+      targets = item$target_list,
+      wt_var = item$wt_var,
+      print = FALSE
+    )
+
+    # Add the dataset identifier to the results
+    res$dataset_name <- item$dataset_name
+    return(res)
+  })
+
+  # --- 2. Aggregation ---
+
+  # Check for duplicate dataset names
+  names_vec <- purrr::map_chr(diagnostics_list, "dataset_name")
+  if (any(duplicated(names_vec))) {
+    stop("Duplicate 'dataset_name' values found. Names must be unique.", call. = FALSE)
+  }
+
+  # A. Tiles (Wide Format)
+  # Extract tiles, rename 'value' to dataset_name, and join
+  tiles_agg <- purrr::map(diagnostics_list, function(res) {
+    res$tiles |>
+      dplyr::select(tile, !!res$dataset_name := value)
+  }) |>
+    purrr::reduce(dplyr::left_join, by = "tile")
+
+  # B. Stats (Long Format)
+  # Extract stats, add DATASET column, bind rows
+  stats_agg <- purrr::map(diagnostics_list, function(res) {
+    res$stats |>
+      dplyr::mutate(DATASET = res$dataset_name, .before = 1)
+  }) |>
+    dplyr::bind_rows()
+
+  # C. Comps (Long Format)
+  # Extract comps, add DATASET column, bind rows
+  comps_agg <- purrr::map(diagnostics_list, function(res) {
+    res$comps |>
+      dplyr::mutate(DATASET = res$dataset_name, .before = 1)
+  }) |>
+    dplyr::bind_rows()
+
+  # --- 3. Output ---
+
+  final_list <- list(
+    tiles = tiles_agg,
+    stats = stats_agg,
+    comps = comps_agg
+  )
+
+  if (isTRUE(print)) {
+    cat("\n--- Survey Contrast Report (Multi-Dataset) ---\n")
+
+    cat("\n[1] Tiles (Quantiles):\n")
+    print(final_list$tiles, n = Inf)
+
+    cat("\n[2] Stats (Summary Metrics):\n")
+    print(final_list$stats, n = Inf)
+
+    cat("\n[3] Comps (Target Alignment):\n")
+    print(final_list$comps, n = Inf)
+    cat("----------------------------------------------\n\n")
+  }
+
+  return(final_list)
 }
