@@ -21,8 +21,10 @@ ignored and quantiles are calculated for every 1\% (i.e., \code{seq(0, 1, 0.01)}
 }
 \value{
 A \code{tibble} with two columns:
-\item{tile}{Character string representing the percentile (e.g., '5\%', '50\%').}
+\describe{
+\item{tile}{Character string representing the percentile (e.g., '5\\%', '50\\%').}
 \item{value}{Numeric value of the weight at that percentile.}
+}
 }
 \description{
 Calculates and neatly formats the specified quantiles (or "tiles")

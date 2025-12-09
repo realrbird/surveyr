@@ -35,11 +35,11 @@ demographic variables.
 The resulting tibble is structured such that each row represents a category
 (e.g., '18-30', 'male', 'South').
 \describe{
-\item{TARGET\_PERCENT}{The target percentage from the \code{targets} list.}
-\item{UNWT\_SAMPLE\_PERCENT}{The calculated sample percentage using unweighted counts.}
-\item{WT\_SAMPLE\_PERCENT}{The calculated sample percentage using the provided survey weights (only present if \code{wt_var} is not \code{NULL}).}
-\item{TARGET\_UNWT\_DIFF}{The difference between target and unweighted sample frequencies.}
-\item{TARGET\_WT\_DIFF}{The difference between target and weighted sample frequencies (only present if \code{wt_var} is not \code{NULL}).}
+\item{TARGET_PERCENT}{The target percentage from the \code{targets} list.}
+\item{UNWT_SAMPLE_PERCENT}{The calculated sample percentage using unweighted counts.}
+\item{WT_SAMPLE_PERCENT}{The calculated sample percentage using the provided survey weights (only present if \code{wt_var} is not \code{NULL}).}
+\item{TARGET_UNWT_DIFF}{The difference between target and unweighted sample frequencies.}
+\item{TARGET_WT_DIFF}{The difference between target and weighted sample frequencies (only present if \code{wt_var} is not \code{NULL}).}
 }
 
 The function relies on the \code{targets} list being correctly structured (validated

@@ -5,7 +5,7 @@
 #' @name weight_creation
 NULL
 
-# Use specific @importFrom to resolve conflicts between dplyr, purrr, rlang, and stats
+# Specific imports to prevent namespace collisions (e.g. dplyr::filter vs stats::filter)
 #' @importFrom dplyr mutate select
 #' @importFrom purrr map
 #' @importFrom rlang .data
@@ -36,7 +36,7 @@ NULL
 #' This function relies on the \code{pewmethods} package for the core raking calculation,
 #' ensuring stability and statistical correctness.
 #'
-#' The function passes the \code{base\_weight} directly to \code{pewmethods::rake_survey},
+#' The function passes the \code{base_weight} directly to \code{pewmethods::rake_survey},
 #' which handles a numeric default of \code{1} or a character string column name.
 #'
 #' @examples
@@ -214,24 +214,40 @@ svy_trim <- function(df, wt_var, lower_quantile = 0.01, upper_quantile = 0.99, p
   if (isTRUE(print_output)) {
     # Assuming svy_diagnostics is available internally
     # Note: target_list needs to be available for svy_comps inside svy_diagnostics
-    diag_report <- svy_diagnostics(
-      data = df_diag,
-      targets = target_list, # Assumes target_list is loaded/available
-      wt_var = "TRIM_WEIGHT",
-      print = FALSE
-    )
+    # Check if target_list exists in calling environment to avoid error
+    targets_for_diag <- NULL
+    if (exists("target_list")) {
+      targets_for_diag <- get("target_list")
+    }
 
-    cat("\n--- Trimming Diagnostic Report: TRIM_WEIGHT ---\n")
-    cat("\n[1] Tiles (Quantiles):\n")
-    print(diag_report$tiles, n = Inf)
+    if (!is.null(targets_for_diag)) {
+      diag_report <- svy_diagnostics(
+        data = df_diag,
+        targets = targets_for_diag,
+        wt_var = "TRIM_WEIGHT",
+        print = FALSE
+      )
 
-    cat("\n[2] Stats (DEFF, ESS, MOE):\n")
-    print(diag_report$stats, n = Inf)
+      cat("\n--- Trimming Diagnostic Report: TRIM_WEIGHT ---\n")
+      cat("\n[1] Tiles (Quantiles):\n")
+      print(diag_report$tiles, n = Inf)
 
-    # Comps are less critical for trimming but included for completeness
-    cat("\n[3] Comps (Target Alignment):\n")
-    print(diag_report$comps, n = Inf)
-    cat("---------------------------------------------\n\n")
+      cat("\n[2] Stats (DEFF, ESS, MOE):\n")
+      print(diag_report$stats, n = Inf)
+
+      # Comps are less critical for trimming but included for completeness
+      cat("\n[3] Comps (Target Alignment):\n")
+      print(diag_report$comps, n = Inf)
+      cat("---------------------------------------------\n\n")
+    } else {
+      # If target_list not found, just print tiles and stats
+      cat("\n--- Trimming Diagnostic Report (Targets not found) ---\n")
+      cat("\n[1] Tiles (Quantiles):\n")
+      print(svy_tiles(trimmed_weights), n = Inf)
+      cat("\n[2] Stats (DEFF, ESS, MOE):\n")
+      print(svy_stats(trimmed_weights), n = Inf)
+      cat("---------------------------------------------\n\n")
+    }
   }
 
   # --- 4. Final Return ---
@@ -468,3 +484,6 @@ svy_rake_optimize <- function(df, targets, max_deff = NULL, max_wt_ratio = NULL,
 
   return(final_weights)
 }
+
+# Add utils::globalVariables call to silence CHECK notes
+if(getRversion() >= "2.15.1") utils::globalVariables(c("target_list"))

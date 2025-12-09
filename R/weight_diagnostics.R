@@ -11,8 +11,10 @@
 #'   ignored and quantiles are calculated for every 1% (i.e., \code{seq(0, 1, 0.01)}).
 #'
 #' @return A \code{tibble} with two columns:
-#'   \item{tile}{Character string representing the percentile (e.g., '5%', '50%').}
+#' \describe{
+#'   \item{tile}{Character string representing the percentile (e.g., '5\%', '50\%').}
 #'   \item{value}{Numeric value of the weight at that percentile.}
+#' }
 #'
 #' @examples
 #' # Load the package data (requires devtools::load_all() during development)
@@ -30,6 +32,7 @@
 #'   svy_tiles(survey_df$WEIGHT, probs = c(0.001, 0.999))
 #' }
 #'
+#' @importFrom tibble tibble
 #' @export
 svy_tiles <- function(wt_vec, probs = c(0, 0.01, 0.05, 0.10, 0.25, 0.5, 0.75, 0.90, 0.95, 0.99, 1), print_all = FALSE) {
 
@@ -82,14 +85,14 @@ svy_tiles <- function(wt_vec, probs = c(0, 0.01, 0.05, 0.10, 0.25, 0.5, 0.75, 0.
 #' @details
 #' \describe{
 #'   \item{DEFF (Kish)}{The Kish approximation of the overall survey design effect,
-#'     calculated as $n \sum w_i^2 / (\sum w_i)^2$. Represents the factor by which
+#'     calculated as \eqn{n \sum w_i^2 / (\sum w_i)^2}. Represents the factor by which
 #'     the sample size must be inflated to achieve the precision of a simple random
 #'     sample.}
-#'   \item{ESS}{The effective sample size, calculated as $n / DEFF$. This is the
+#'   \item{ESS}{The effective sample size, calculated as \eqn{n / DEFF}. This is the
 #'     size of a simple random sample required to achieve the same precision.}
 #'   \item{MOE}{The design-adjusted margin of error, calculated assuming a worst-case
-#'     proportion of $0.5$ (50\%/50\% split) and expressed in percentage points.
-#'     The formula is: $Z_{\alpha/2} \times \sqrt{0.25 / \text{ESS}} \times 100$.}
+#'     proportion of 0.5 (50\%/50\% split) and expressed in percentage points.
+#'     The formula is: \eqn{Z_{\alpha/2} \times \sqrt{0.25 / ESS} \times 100}.}
 #' }
 #'
 #' @examples
@@ -180,11 +183,11 @@ svy_stats <- function(wt_vec, conf_level = 0.95) {
 #' The resulting tibble is structured such that each row represents a category
 #' (e.g., '18-30', 'male', 'South').
 #' \describe{
-#'   \item{TARGET\_PERCENT}{The target percentage from the \code{targets} list.}
-#'   \item{UNWT\_SAMPLE\_PERCENT}{The calculated sample percentage using unweighted counts.}
-#'   \item{WT\_SAMPLE\_PERCENT}{The calculated sample percentage using the provided survey weights (only present if \code{wt_var} is not \code{NULL}).}
-#'   \item{TARGET\_UNWT\_DIFF}{The difference between target and unweighted sample frequencies.}
-#'   \item{TARGET\_WT\_DIFF}{The difference between target and weighted sample frequencies (only present if \code{wt_var} is not \code{NULL}).}
+#'   \item{TARGET_PERCENT}{The target percentage from the \code{targets} list.}
+#'   \item{UNWT_SAMPLE_PERCENT}{The calculated sample percentage using unweighted counts.}
+#'   \item{WT_SAMPLE_PERCENT}{The calculated sample percentage using the provided survey weights (only present if \code{wt_var} is not \code{NULL}).}
+#'   \item{TARGET_UNWT_DIFF}{The difference between target and unweighted sample frequencies.}
+#'   \item{TARGET_WT_DIFF}{The difference between target and weighted sample frequencies (only present if \code{wt_var} is not \code{NULL}).}
 #' }
 #'
 #' The function relies on the `targets` list being correctly structured (validated
@@ -248,12 +251,13 @@ svy_comps <- function(data, targets, wt_var = NULL) {
     comparison_df <- target_df |>
       dplyr::select(dplyr::all_of(var_name), TARGET_PERCENT = "Freq") |> # Fix: Use explicit string name
 
-      # Join with unweighted counts
+      # FIX: Use simple string join by var_name, which is now stable.
       dplyr::left_join(unwt_counts, by = var_name) |>
 
       dplyr::mutate(
         VAR = var_name,
         LEVEL = as.character(!!var_sym),
+        # FIX: Correct arithmetic by referencing the numeric columns
         TARGET_UNWT_DIFF = .data$TARGET_PERCENT - .data$UNWT_SAMPLE_PERCENT
       )
     # FIX: DO NOT SELECT/DROP COLUMNS HERE.
@@ -276,6 +280,7 @@ svy_comps <- function(data, targets, wt_var = NULL) {
         dplyr::left_join(weighted_counts, by = var_name) |>
 
         dplyr::mutate(
+          # FIX: Perform arithmetic on the named columns
           TARGET_WT_DIFF = .data$TARGET_PERCENT - .data$WT_SAMPLE_PERCENT
         )
     }
@@ -401,6 +406,7 @@ svy_diagnostics <- function(data, targets, wt_var, print = TRUE) {
 #'   svy_compare_tiles(survey_df_comp, wt_vars = c("WEIGHT", "WEIGHT_2"))
 #' }
 #'
+#' @importFrom rlang :=
 #' @export
 svy_compare_tiles <- function(data, wt_vars, probs = c(0, 0.01, 0.05, 0.10, 0.25, 0.5, 0.75, 0.90, 0.95, 0.99, 1)) {
 
@@ -765,3 +771,6 @@ svy_contrast <- function(..., print = TRUE) {
 
   return(final_list)
 }
+
+# Add utils::globalVariables call to silence CHECK notes
+if(getRversion() >= "2.15.1") utils::globalVariables(c("tile", "value", "n", "Freq", "TARGET_PERCENT", "UNWT_SAMPLE_PERCENT", "WT_SAMPLE_PERCENT", ":="))

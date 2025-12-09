@@ -30,14 +30,14 @@ size (ESS).
 \details{
 \describe{
 \item{DEFF (Kish)}{The Kish approximation of the overall survey design effect,
-calculated as $n \sum w_i^2 / (\sum w_i)^2$. Represents the factor by which
+calculated as \eqn{n \sum w_i^2 / (\sum w_i)^2}. Represents the factor by which
 the sample size must be inflated to achieve the precision of a simple random
 sample.}
-\item{ESS}{The effective sample size, calculated as $n / DEFF$. This is the
+\item{ESS}{The effective sample size, calculated as \eqn{n / DEFF}. This is the
 size of a simple random sample required to achieve the same precision.}
 \item{MOE}{The design-adjusted margin of error, calculated assuming a worst-case
-proportion of $0.5$ (50\\%/50\\% split) and expressed in percentage points.
-The formula is: $Z_{\alpha/2} \times \sqrt{0.25 / \text{ESS}} \times 100$.}
+proportion of 0.5 (50\\%/50\\% split) and expressed in percentage points.
+The formula is: \eqn{Z_{\alpha/2} \times \sqrt{0.25 / ESS} \times 100}.}
 }
 }
 \examples{

@@ -35,7 +35,7 @@ the underlying Generalized Regression Estimator (GREG) provided by
 This function relies on the \code{pewmethods} package for the core raking calculation,
 ensuring stability and statistical correctness.
 
-The function passes the \code{base\_weight} directly to \code{pewmethods::rake_survey},
+The function passes the \code{base_weight} directly to \code{pewmethods::rake_survey},
 which handles a numeric default of \code{1} or a character string column name.
 }
 \examples{
