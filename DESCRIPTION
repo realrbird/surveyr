@@ -19,7 +19,8 @@ LazyData: true
 Imports: 
     crayon,
     dplyr,
+    haven,
     pewmethods,
     purrr,
     rlang,
-    tibble	
+    tibble
