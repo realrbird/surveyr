@@ -19,6 +19,7 @@ LazyData: true
 Imports: 
     crayon,
     dplyr,
+    forcats,
     haven,
     pewmethods,
     purrr,
