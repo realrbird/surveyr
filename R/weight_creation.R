@@ -465,7 +465,7 @@ svy_rake_optimize <- function(df, targets, max_deff = NULL, max_wt_ratio = NULL,
     ratio_ok <- is.null(max_wt_ratio) || (stats$wt_ratio <= max_wt_ratio)
 
     if (deff_ok && ratio_ok) {
-      cat(crayon::green(paste0("✓ Solution Found! Cap: ", current_cap, " | DEFF: ", round(stats$deff, 2), " | Ratio: ", round(stats$wt_ratio, 2), "\n")))
+NA
       final_weights <- wts
       found_solution <- TRUE
       break

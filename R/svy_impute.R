@@ -1,6 +1,24 @@
-library(dplyr)
-library(haven)
-
+#' Impute Missing Values in Survey Data
+#'
+#' Imputes missing values for specified variables using the `pewmethods` package (which wraps `mice` and `ranger`).
+#' It performs checks for variable existence, naming conflicts, and high correlation before imputation.
+#'
+#' @param data A data frame or tibble containing the survey data.
+#' @param vars_to_impute A character vector of variable names to impute.
+#' @param vars_to_keep A character vector of variable names to keep and return (imputed versions).
+#' @param pre_fix A character string to prefix the returned variable names. Default is "imp_".
+#' @param convert_to_fct Logical. If TRUE, converts labelled/character variables to factors before imputation. Default is TRUE.
+#' @param method The imputation method to use (passed to `pewmethods::impute_vars`). Default is "ranger".
+#' @param seed Numeric seed for reproducibility. Default is NA.
+#' @param correlation_threshold Numeric value (0-1). Warns if variables are correlated above this threshold. Default is 0.99.
+#' @param ... Additional arguments passed to `pewmethods::impute_vars`.
+#'
+#' @return A data frame containing the original ID (if applicable) and the imputed variables merged back.
+#'
+#' @importFrom dplyr select mutate rename_with left_join all_of across %>%
+#' @importFrom haven as_factor
+#' @importFrom stats cor
+#' @export
 svy_impute <- function(
     data,
     vars_to_impute,
@@ -13,7 +31,9 @@ svy_impute <- function(
     ...
 ) {
 
-  # ... [Keep Validation Checks 1, 2, 3 same as before] ...
+  # ------------------------------------------------------------------
+  # 1. Validation Checks
+  # ------------------------------------------------------------------
 
   # Check data type
   if (!is.data.frame(data)) stop('"data" must be a data.frame or tibble.')
@@ -29,7 +49,9 @@ svy_impute <- function(
   existing_conflicts <- intersect(new_names, colnames(data))
   if (length(existing_conflicts) > 0) stop(paste0("The following result variables already exist in the data: ", paste(existing_conflicts, collapse = ", ")))
 
-  # Correlation Logic [Same as before]
+  # ------------------------------------------------------------------
+  # 2. Correlation/Collinearity Check
+  # ------------------------------------------------------------------
   check_data <- data %>% select(all_of(all_vars))
   check_data_num <- check_data %>%
     mutate(across(where(is.factor), as.numeric)) %>%
@@ -45,7 +67,9 @@ svy_impute <- function(
     }
   }
 
-  # Setup ID
+  # ------------------------------------------------------------------
+  # 3. Setup Unique ID for Merging
+  # ------------------------------------------------------------------
   keep_iterating <- TRUE
   while (keep_iterating) {
     unique_id_num <- sample(1:10000, 1)
@@ -59,14 +83,13 @@ svy_impute <- function(
   data_copy <- data
 
   # ------------------------------------------------------------------
-  # 4. Pre-processing (UPDATED)
+  # 4. Pre-processing
   # ------------------------------------------------------------------
   if (convert_to_fct) {
     # First handle haven labels
     data_copy <- haven::as_factor(data_copy)
 
-    # NEW: Explicitly convert remaining characters to factors
-    # Imputation engines like ranger often skip character columns otherwise
+    # Explicitly convert remaining characters to factors
     data_copy <- data_copy %>%
       mutate(across(where(is.character), as.factor))
   }
@@ -74,6 +97,11 @@ svy_impute <- function(
   # ------------------------------------------------------------------
   # 5. Run Imputation
   # ------------------------------------------------------------------
+  # Ensure pewmethods is available (suggested package)
+  if (!requireNamespace("pewmethods", quietly = TRUE)) {
+    stop("The 'pewmethods' package is required for this function. Please install it.")
+  }
+
   data_copy <- data_copy %>%
     pewmethods::impute_vars(
       to_impute = all_vars,
@@ -82,9 +110,9 @@ svy_impute <- function(
       ...
     )
 
-  # ... [Keep Post-Imputation Validation & Return same as before] ...
-
+  # ------------------------------------------------------------------
   # 6. Post-Imputation Validation
+  # ------------------------------------------------------------------
   missing_check <- colSums(is.na(data_copy[vars_to_keep]))
   if (any(missing_check > 0)) {
     failed_vars <- names(missing_check[missing_check > 0])
@@ -94,6 +122,9 @@ svy_impute <- function(
     ))
   }
 
+  # ------------------------------------------------------------------
+  # 7. Format and Return
+  # ------------------------------------------------------------------
   final_data_copy <- data_copy %>%
     select(all_of(c(unique_id, vars_to_keep))) %>%
     rename_with(~ paste0(pre_fix, .), .cols = all_of(vars_to_keep))

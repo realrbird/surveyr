@@ -1,18 +1,19 @@
-#' @title Survey Weight Quantiles
-#' @description Calculates and neatly formats the specified quantiles (or "tiles")
-#'   of a vector of survey weights. This is useful for diagnostic purposes,
-#'   particularly when assessing the need for weight trimming or identifying
-#'   influential outliers.
+#' Survey Weight Quantiles
 #'
-#' @param wt_vec A numeric vector containing the survey weights. Must not contain \code{NA} values.
+#' Calculates and neatly formats the specified quantiles (or "tiles")
+#' of a vector of survey weights. This is useful for diagnostic purposes,
+#' particularly when assessing the need for weight trimming or identifying
+#' influential outliers.
+#'
+#' @param wt_vec A numeric vector containing the survey weights. Must not contain `NA` values.
 #' @param probs A numeric vector of probabilities (between 0 and 1) at which to
 #'   compute the quantiles. Defaults to a standard set of diagnostic quantiles.
-#' @param print_all A logical flag. If \code{TRUE}, the \code{probs} argument is
-#'   ignored and quantiles are calculated for every 1% (i.e., \code{seq(0, 1, 0.01)}).
+#' @param print_all A logical flag. If `TRUE`, the `probs` argument is
+#'   ignored and quantiles are calculated for every 1% (i.e., `seq(0, 1, 0.01)`).
 #'
-#' @return A \code{tibble} with two columns:
+#' @return A `tibble` with two columns:
 #' \describe{
-#'   \item{tile}{Character string representing the percentile (e.g., '5\%', '50\%').}
+#'   \item{tile}{Character string representing the percentile (e.g., '5 percent', '50 percent').}
 #'   \item{value}{Numeric value of the weight at that percentile.}
 #' }
 #'
