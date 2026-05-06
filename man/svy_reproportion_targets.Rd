@@ -2,24 +2,21 @@
 % Please edit documentation in R/svy_reproportion_targets.R
 \name{svy_reproportion_targets}
 \alias{svy_reproportion_targets}
-\title{Reproportion Targets to Account for Missing Data}
+\title{Reproportion Multiple Targets}
 \usage{
-svy_reproportion_targets(df, targets, missing_cat = "Missing")
+svy_reproportion_targets(data, targets, missing_val = "Missing")
 }
 \arguments{
-\item{df}{The dataset (data.frame or tibble).}
+\item{data}{A data frame or tibble containing the survey data.}
 
-\item{targets}{A named list of data frames representing target distributions.
-The list names must correspond to variables in \code{df}.}
+\item{targets}{A named list of target data frames. The names of the list
+must correspond to the variable names in the data.}
 
-\item{missing_cat}{Character string for the missing category label. Default is 'Missing'.}
+\item{missing_val}{A character string for the missing category label. Default is "Missing".}
 }
 \value{
-A modified list of targets.
+A named list of reproportioned target tibbles.
 }
 \description{
-Adjusts target distributions to include a category for missing values (NA) found in the
-sample data. This ensures that records with missing data on weighting variables are
-accounted for (assigned a specific target proportion) rather than being dropped or
-causing errors during raking.
+Applies \code{svy_reproportion_target} across a list of target data frames.
 }

@@ -2,24 +2,26 @@
 % Please edit documentation in R/svy_reproportion_targets.R
 \name{svy_reproportion_target}
 \alias{svy_reproportion_target}
-\title{Reproportion a Single Target for Missing Data}
+\title{Reproportion a Single Target to Account for Missing Data}
 \usage{
-svy_reproportion_target(target_df, var_name, df, missing_cat = "Missing")
+svy_reproportion_target(data, target, var_name, missing_val = "Missing")
 }
 \arguments{
-\item{target_df}{A data frame containing the target distribution.}
+\item{data}{A data frame or tibble containing the survey data.}
 
-\item{var_name}{The name of the variable (string) to check in \code{df}.}
+\item{target}{A data frame or tibble containing the targets. Must have
+a column matching \code{var_name} and a numeric column named \code{Freq}.}
 
-\item{df}{The dataset (data.frame or tibble).}
+\item{var_name}{A character string specifying the variable name.}
 
-\item{missing_cat}{Character string for the missing category label.}
+\item{missing_val}{A character string for the missing category label. Default is "Missing".}
 }
 \value{
-A modified target data frame.
+A tibble with the adjusted targets and preserved factor levels.
 }
 \description{
-Internal helper function that processes a single target data frame.
-It identifies missing values in the corresponding variable in the dataset,
-adds a "Missing" row to the target, and renormalizes the proportions.
+Adjusts the target proportions of a variable to account for missing
+cases in the survey data. The non-missing categories are scaled down
+proportionally, and a new "Missing" category is added that exactly matches
+the missing rate in the data.
 }

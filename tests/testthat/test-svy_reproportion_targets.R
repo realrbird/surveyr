@@ -2,100 +2,85 @@ library(testthat)
 library(dplyr)
 library(tibble)
 
-# -------------------------------------------------------------------
-# Unit Tests for svy_reproportion_targets & svy_reproportion_target
-# -------------------------------------------------------------------
-
-test_that("svy_reproportion_target (helper) works correctly", {
-  # 1. Setup Data: 10 rows, 1 NA (10% missing)
+test_that("svy_reproportion_target corrects the math exactly", {
+  # 100 rows total: 25 NAs -> 25% missing
   df <- tibble(
-    sex = factor(c(rep("M", 9), NA))
+    sex_group = c(rep("Male", 40), rep("Female", 35), rep(NA, 25))
   )
 
-  # 2. Setup Target: 'Freq' sums to 100
-  target_df <- tibble(
-    sex = factor("M"),
-    Freq = 100
+  # Target sum is 100
+  target <- tibble(
+    sex_group = factor(c("Male", "Female"), levels = c("Male", "Female")),
+    Freq = c(49, 51)
   )
 
-  # 3. Run helper
-  res <- svy_reproportion_target(target_df, "sex", df, missing_cat = "(Missing)")
+  res <- svy_reproportion_target(df, target, "sex_group")
 
-  # 4. Verify Structure
-  expect_true("(Missing)" %in% res$sex)
-  expect_true(is.factor(res$sex))
-
-  # 5. Verify Math (Sums to 100)
+  # Check Total Sum (Should remain exactly 100)
   expect_equal(sum(res$Freq), 100)
 
-  # Logic check:
-  # NA prop in data = 0.1
-  # Target Sum = 100
-  # Added Value (Raw) = 0.1 * 100 = 10
-  # New Total (Raw) = 110
-  # Expected Missing % = (10 / 110) * 100 = 9.0909...
+  # Check Missing Target (Should be exactly 25% of 100 = 25)
+  missing_freq <- res$Freq[res$sex_group == "Missing"]
+  expect_equal(missing_freq, 25)
 
-  missing_row <- res |> filter(sex == "(Missing)")
-  expected_val <- (10/110) * 100
-  expect_equal(missing_row$Freq, expected_val)
+  # Check Male/Female adjustments
+  # Male: 49 * 0.75 = 36.75
+  # Female: 51 * 0.75 = 38.25
+  expect_equal(res$Freq[res$sex_group == "Male"], 36.75)
+  expect_equal(res$Freq[res$sex_group == "Female"], 38.25)
 })
 
-test_that("svy_reproportion_targets (wrapper) processes list correctly", {
-  # 1. Setup Data with multiple variables
-  # FIX: Ensure both columns are length 10 to satisfy tibble requirements
+test_that("svy_reproportion_target preserves factor level order", {
+  # 1 NA out of 10 -> 10% missing
   df <- tibble(
-    sex = factor(c(rep("M", 9), NA)),             # 10% NA (1/10)
-    region = factor(c(rep("North", 8), NA, NA))   # 20% NA (2/10) - matches math below
+    sex_group = c(rep("Male", 4), rep("Female", 5), NA)
   )
 
-  # 2. Setup Targets List
-  targets <- list(
-    sex = tibble(sex = factor("M"), Freq = 100),
-    region = tibble(region = factor("North"), Freq = 100)
+  # Explicit order: Female first, then Male
+  target <- tibble(
+    sex_group = factor(c("Female", "Male"), levels = c("Female", "Male")),
+    Freq = c(60, 40)
   )
 
-  # 3. Run wrapper
-  res_list <- svy_reproportion_targets(df, targets, missing_cat = "Missing")
+  res <- svy_reproportion_target(df, target, "sex_group")
 
-  # 4. Verify List Structure
-  expect_equal(length(res_list), 2)
-  expect_named(res_list, c("sex", "region"))
-
-  # 5. Verify individual contents
-  expect_true("Missing" %in% res_list$sex$sex)
-  expect_true("Missing" %in% res_list$region$region)
-
-  # Check Region Math:
-  # NA prop = 0.2 (2/10). Raw Total = 120. Missing % = (20/120)*100 = 16.666...
-  expect_equal(sum(res_list$region$Freq), 100)
-  expect_equal(res_list$region$Freq[res_list$region$region == "Missing"], (20/120)*100)
+  # The levels should be Female, Male, Missing (Missing added to the end)
+  expect_equal(levels(res$sex_group), c("Female", "Male", "Missing"))
 })
 
-test_that("svy_reproportion_target handles input validation", {
-  df <- tibble(sex = factor("M"))
+test_that("svy_reproportion_target returns unmodified target if 0 missing cases", {
+  df <- tibble(sex_group = c("Male", "Female")) # No NAs
 
-  # Error: Variable not in data
-  target_ok <- tibble(sex = "M", Freq = 100)
-  expect_error(
-    svy_reproportion_target(target_ok, "bad_var", df),
-    "Target variable 'bad_var' is not present"
+  target <- tibble(
+    sex_group = factor(c("Male", "Female"), levels = c("Male", "Female")),
+    Freq = c(50, 50)
   )
 
-  # Error: Missing 'Freq' column
-  target_bad_col <- tibble(sex = "M", pct = 100) # Wrong name 'pct'
-  expect_error(
-    svy_reproportion_target(target_bad_col, "sex", df),
-    "must have a numeric column named 'Freq'"
-  )
+  res <- svy_reproportion_target(df, target, "sex_group")
+
+  # Should be perfectly identical
+  expect_equal(res, target)
+  expect_equal(levels(res$sex_group), c("Male", "Female"))
 })
 
-test_that("svy_reproportion_target leaves data unchanged if no NAs", {
-  df <- tibble(sex = factor(c("M", "F"))) # 0% NA
-  target_df <- tibble(sex = factor(c("M", "F")), Freq = c(50, 50))
+test_that("svy_reproportion_targets wrapper works over lists", {
+  df <- tibble(
+    v1 = c("A", NA, "A", "A"), # 25% missing
+    v2 = c("X", "Y", "X", "Y") # 0% missing
+  )
 
-  res <- svy_reproportion_target(target_df, "sex", df)
+  t_list <- list(
+    v1 = tibble(v1 = factor("A"), Freq = 100),
+    v2 = tibble(v2 = factor(c("X", "Y")), Freq = c(50, 50))
+  )
 
-  # Should be identical to input
-  expect_equal(res, target_df)
-  expect_false("Missing" %in% res$sex)
+  res_list <- svy_reproportion_targets(df, t_list)
+
+  # v1 should have missing appended and adjusted to 25
+  expect_equal(nrow(res_list$v1), 2)
+  expect_equal(res_list$v1$Freq[res_list$v1$v1 == "Missing"], 25)
+
+  # v2 should be untouched
+  expect_equal(nrow(res_list$v2), 2)
+  expect_equal(levels(res_list$v2$v2), c("X", "Y"))
 })

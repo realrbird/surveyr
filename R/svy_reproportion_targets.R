@@ -1,90 +1,95 @@
-#' Reproportion a Single Target for Missing Data
+#' Reproportion a Single Target to Account for Missing Data
 #'
-#' Internal helper function that processes a single target data frame.
-#' It identifies missing values in the corresponding variable in the dataset,
-#' adds a "Missing" row to the target, and renormalizes the proportions.
+#' Adjusts the target proportions of a variable to account for missing
+#' cases in the survey data. The non-missing categories are scaled down
+#' proportionally, and a new "Missing" category is added that exactly matches
+#' the missing rate in the data.
 #'
-#' @param target_df A data frame containing the target distribution.
-#' @param var_name The name of the variable (string) to check in `df`.
-#' @param df The dataset (data.frame or tibble).
-#' @param missing_cat Character string for the missing category label.
+#' @param data A data frame or tibble containing the survey data.
+#' @param target A data frame or tibble containing the targets. Must have
+#'   a column matching \code{var_name} and a numeric column named \code{Freq}.
+#' @param var_name A character string specifying the variable name.
+#' @param missing_val A character string for the missing category label. Default is "Missing".
 #'
-#' @return A modified target data frame.
-#' @importFrom dplyr mutate across all_of summarise pull bind_rows
+#' @return A tibble with the adjusted targets and preserved factor levels.
+#' @importFrom dplyr bind_rows
 #' @importFrom tibble tibble
-#' @importFrom rlang sym :=
 #' @export
-svy_reproportion_target <- function(target_df, var_name, df, missing_cat = 'Missing') {
+svy_reproportion_target <- function(data, target, var_name, missing_val = "Missing") {
 
-  # 1. Validation: Variable must exist in data
-  if (!var_name %in% names(df)) {
-    stop(paste0("Target variable '", var_name, "' is not present in the dataset."))
+  # 1. Validation
+  if (!var_name %in% names(data)) {
+    stop(paste("Variable", var_name, "not found in data."))
+  }
+  if (!"Freq" %in% names(target)) {
+    stop("Target data frame must contain a 'Freq' column.")
   }
 
-  # 2. Check for required 'Freq' column
-  if (!"Freq" %in% names(target_df)) {
-    stop(paste0("Target table for '", var_name, "' must have a numeric column named 'Freq'."))
+  # 2. Calculate missing proportion in the sample data
+  x <- data[[var_name]]
+  pct_missing <- sum(is.na(x)) / length(x)
+
+  # If no missing data, return target unmodified
+  if (pct_missing == 0) {
+    return(target)
   }
 
-  # 3. Calculate Missingness in Data
-  # using tidyverse syntax as requested
-  na_prop <- df |>
-    summarise(prop = mean(is.na(!!sym(var_name)))) |>
-    pull(prop)
-
-  # If no missing data, return target as is
-  if (na_prop == 0) {
-    return(target_df)
+  # 3. Store original factor levels to preserve order
+  orig_levels <- levels(target[[var_name]])
+  if (is.null(orig_levels)) {
+    # Fallback if target wasn't explicitly a factor
+    orig_levels <- unique(as.character(target[[var_name]]))
   }
+  new_levels <- c(orig_levels, missing_val)
 
-  # 4. Calculate New Row Values
-  # Scale NA proportion to the current sum of weights (e.g. 100 or 1)
-  current_sum <- sum(target_df$Freq, na.rm = TRUE)
-  added_val <- na_prop * current_sum
+  # 4. Reproportion frequencies
+  # We scale the existing targets down by (1 - pct_missing)
+  # and set the missing frequency to the exact total * pct_missing
+  total_freq <- sum(target$Freq)
 
-  # 5. Create new row
-  new_row <- tibble(
-    !!sym(var_name) := missing_cat,
-    Freq = added_val
+  target_new <- target
+  target_new$Freq <- target_new$Freq * (1 - pct_missing)
+
+  missing_freq <- total_freq * pct_missing
+
+  # 5. Create missing row safely
+  # Convert column to character temporarily to avoid factor binding warnings
+  target_new[[var_name]] <- as.character(target_new[[var_name]])
+
+  missing_row <- tibble::tibble(
+    name = missing_val,
+    Freq = missing_freq
   )
+  # Rename 'name' to the actual variable name
+  names(missing_row)[1] <- var_name
 
-  # 6. Bind, Renormalize, and Return
-  target_df |>
-    # Convert factor to character to bind the new string label
-    mutate(across(all_of(var_name), as.character)) |>
-    bind_rows(new_row) |>
-    # Renormalize Freq so it sums to 100
-    mutate(Freq = Freq / sum(Freq) * 100) |>
-    # Convert back to factor
-    mutate(across(all_of(var_name), as.factor))
+  # Bind rows together
+  res <- dplyr::bind_rows(target_new, missing_row)
+
+  # 6. Re-apply factor with exact preserved levels
+  res[[var_name]] <- factor(res[[var_name]], levels = new_levels)
+
+  return(res)
 }
 
-#' Reproportion Targets to Account for Missing Data
+
+#' Reproportion Multiple Targets
 #'
-#' Adjusts target distributions to include a category for missing values (NA) found in the
-#' sample data. This ensures that records with missing data on weighting variables are
-#' accounted for (assigned a specific target proportion) rather than being dropped or
-#' causing errors during raking.
+#' Applies \code{svy_reproportion_target} across a list of target data frames.
 #'
-#' @param df The dataset (data.frame or tibble).
-#' @param targets A named list of data frames representing target distributions.
-#'   The list names must correspond to variables in `df`.
-#' @param missing_cat Character string for the missing category label. Default is 'Missing'.
+#' @param data A data frame or tibble containing the survey data.
+#' @param targets A named list of target data frames. The names of the list
+#'   must correspond to the variable names in the data.
+#' @param missing_val A character string for the missing category label. Default is "Missing".
 #'
-#' @return A modified list of targets.
+#' @return A named list of reproportioned target tibbles.
 #' @importFrom purrr imap
 #' @export
-svy_reproportion_targets <- function(df, targets, missing_cat = 'Missing') {
+svy_reproportion_targets <- function(data, targets, missing_val = "Missing") {
 
-  # Validation
-  if (!is.data.frame(df)) stop("Argument 'df' must be a data.frame or tibble.")
+  if (!is.list(targets) || is.null(names(targets))) {
+    stop("'targets' must be a named list.")
+  }
 
-  # Validate structure (ensures 'Freq' column exists and vars match)
-  chk_target_structure(targets, df)
-
-  # Use purrr::imap to iterate over the list (target_df) and its names (var_name)
-  targets |>
-    imap(function(target_df, var_name) {
-      svy_reproportion_target(target_df, var_name, df, missing_cat)
-    })
+  purrr::imap(targets, ~ svy_reproportion_target(data, .x, .y, missing_val = missing_val))
 }
