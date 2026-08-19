@@ -24,15 +24,14 @@ weights will be capped at the threshold. Defaults to 0.01.}
 \item{upper_quantile}{The upper quantile (e.g., 0.99 for 99th percentile) above which
 weights will be capped at the threshold. Defaults to 0.99.}
 
-\item{print_output}{A logical flag. If \code{TRUE}, the diagnostic report from
-\code{svy_diagnostics()} is printed to the console using the full tibble print
-(\code{n = Inf}). Defaults to \code{TRUE}.}
+\item{print_output}{A logical flag. If \code{TRUE}, a diagnostic report containing
+quantiles and stats is printed to the console. Defaults to \code{TRUE}.}
 
 \item{...}{Additional arguments passed directly to \code{pewmethods::trim_weights}
 (e.g., \code{minval}, \code{maxval}, \code{strict}).}
 }
 \value{
-A \strong{numeric vector} containing the final trimmed weights (named \code{TRIM_WEIGHT}).
+A \strong{numeric vector} containing the final trimmed weights.
 }
 \description{
 Implements weight trimming (Winsorization) to reduce the influence
@@ -53,9 +52,6 @@ if (requireNamespace("pewmethods", quietly = TRUE) & requireNamespace("dplyr", q
   # Trim the existing WEIGHT column at the 1st and 99th percentiles (default)
   trimmed_weights <- svy_trim(survey_df, "WEIGHT")
 
-  # Check max original vs max trimmed
-  # max(survey_df$WEIGHT)
-  # max(trimmed_weights)
 }
 
 }

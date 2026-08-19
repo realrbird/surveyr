@@ -144,13 +144,12 @@ svy_rake <- function(df, targets, base_weight = 1, print_output = TRUE, ...) {
 #'   weights will be capped at the threshold. Defaults to 0.01.
 #' @param upper_quantile The upper quantile (e.g., 0.99 for 99th percentile) above which
 #'   weights will be capped at the threshold. Defaults to 0.99.
-#' @param print_output A logical flag. If \code{TRUE}, the diagnostic report from
-#'   \code{svy_diagnostics()} is printed to the console using the full tibble print
-#'   (\code{n = Inf}). Defaults to \code{TRUE}.
+#' @param print_output A logical flag. If \code{TRUE}, a diagnostic report containing
+#'   quantiles and stats is printed to the console. Defaults to \code{TRUE}.
 #' @param ... Additional arguments passed directly to \code{pewmethods::trim_weights}
 #'   (e.g., \code{minval}, \code{maxval}, \code{strict}).
 #'
-#' @return A **numeric vector** containing the final trimmed weights (named \code{TRIM_WEIGHT}).
+#' @return A **numeric vector** containing the final trimmed weights.
 #'
 #' @details
 #' Trimming replaces weights falling outside the specified quantiles with the
@@ -166,9 +165,6 @@ svy_rake <- function(df, targets, base_weight = 1, print_output = TRUE, ...) {
 #'   # Trim the existing WEIGHT column at the 1st and 99th percentiles (default)
 #'   trimmed_weights <- svy_trim(survey_df, "WEIGHT")
 #'
-#'   # Check max original vs max trimmed
-#'   # max(survey_df$WEIGHT)
-#'   # max(trimmed_weights)
 #' }
 #'
 #' @export
@@ -206,48 +202,13 @@ svy_trim <- function(df, wt_var, lower_quantile = 0.01, upper_quantile = 0.99, p
   )
 
   # --- 3. Run Diagnostics ---
-
-  # Re-create a data frame containing the weights for diagnostics
-  df_diag <- df |>
-    dplyr::mutate(TRIM_WEIGHT = trimmed_weights)
-
   if (isTRUE(print_output)) {
-    # Assuming svy_diagnostics is available internally
-    # Note: target_list needs to be available for svy_comps inside svy_diagnostics
-    # Check if target_list exists in calling environment to avoid error
-    targets_for_diag <- NULL
-    if (exists("target_list")) {
-      targets_for_diag <- get("target_list")
-    }
-
-    if (!is.null(targets_for_diag)) {
-      diag_report <- svy_diagnostics(
-        data = df_diag,
-        targets = targets_for_diag,
-        wt_var = "TRIM_WEIGHT",
-        print = FALSE
-      )
-
-      cat("\n--- Trimming Diagnostic Report: TRIM_WEIGHT ---\n")
-      cat("\n[1] Tiles (Quantiles):\n")
-      print(diag_report$tiles, n = Inf)
-
-      cat("\n[2] Stats (DEFF, ESS, MOE):\n")
-      print(diag_report$stats, n = Inf)
-
-      # Comps are less critical for trimming but included for completeness
-      cat("\n[3] Comps (Target Alignment):\n")
-      print(diag_report$comps, n = Inf)
-      cat("---------------------------------------------\n\n")
-    } else {
-      # If target_list not found, just print tiles and stats
-      cat("\n--- Trimming Diagnostic Report (Targets not found) ---\n")
-      cat("\n[1] Tiles (Quantiles):\n")
-      print(svy_tiles(trimmed_weights), n = Inf)
-      cat("\n[2] Stats (DEFF, ESS, MOE):\n")
-      print(svy_stats(trimmed_weights), n = Inf)
-      cat("---------------------------------------------\n\n")
-    }
+    cat("\n--- Trimming Diagnostic Report ---\n")
+    cat("\n[1] Tiles (Quantiles):\n")
+    print(svy_tiles(trimmed_weights), n = Inf)
+    cat("\n[2] Stats (DEFF, ESS, MOE):\n")
+    print(svy_stats(trimmed_weights), n = Inf)
+    cat("---------------------------------------------\n\n")
   }
 
   # --- 4. Final Return ---
@@ -483,6 +444,90 @@ NA
   }
 
   return(final_weights)
+}
+
+#' @title Trim Extreme Survey Weights (Vectorized)
+#' @description Implements weight trimming (Winsorization) to reduce the influence
+#'   of extreme weights. Operates directly on a numeric vector.
+#'
+#' @param weights A numeric vector of survey weights.
+#' @param lower_quantile The lower quantile (e.g., 0.01 for 1st percentile) below which
+#'   weights will be capped at the threshold. Defaults to 0.01.
+#' @param upper_quantile The upper quantile (e.g., 0.99 for 99th percentile) above which
+#'   weights will be capped at the threshold. Defaults to 0.99.
+#' @param normalize Logical. If \code{TRUE} (default), weights are rescaled to preserve
+#'   the original sum using \code{pewmethods::trim_weights}. If \code{FALSE}, strict numeric
+#'   caps are applied without rescaling.
+#' @param print_output A logical flag. If \code{TRUE}, a diagnostic report containing
+#'   quantiles and stats is printed to the console. Defaults to \code{TRUE}.
+#' @param ... Additional arguments passed (e.g., \code{minval}, \code{maxval}, \code{strict}).
+#'
+#' @return A **numeric vector** containing the final trimmed weights.
+#'
+#' @export
+svy_trim_vector <- function(weights, lower_quantile = 0.01, upper_quantile = 0.99, normalize = TRUE, print_output = TRUE, ...) {
+
+  # --- 1. Validation ---
+  if (!is.numeric(weights)) {
+    stop("`weights` must be a numeric vector.", call. = FALSE)
+  }
+
+  if (!is.numeric(lower_quantile) | lower_quantile < 0 | lower_quantile >= 1 |
+      !is.numeric(upper_quantile) | upper_quantile <= 0 | upper_quantile > 1 |
+      lower_quantile >= upper_quantile) {
+    stop("Quantiles must be numeric, between 0 and 1, and lower_quantile must be less than upper_quantile.", call. = FALSE)
+  }
+
+  # --- 2. Apply Trimming ---
+  if (isTRUE(normalize)) {
+
+    if (!requireNamespace("pewmethods", quietly = TRUE)) {
+      stop("The 'pewmethods' package is required for normalized trimming. Please install it.", call. = FALSE)
+    }
+
+    trimmed_weights <- pewmethods::trim_weights(
+      weight = weights,
+      lower_quantile = lower_quantile,
+      upper_quantile = upper_quantile,
+      ...
+    )
+
+  } else {
+
+    # Manual un-normalized capping
+    args <- list(...)
+    minval <- args$minval
+    maxval <- args$maxval
+
+    bounds <- stats::quantile(weights, probs = c(lower_quantile, upper_quantile), na.rm = TRUE)
+    l_bound <- unname(bounds[1])
+    u_bound <- unname(bounds[2])
+
+    # Mimic pewmethods logic: override quantiles if minval/maxval are stricter
+    if (!is.null(minval) && l_bound < minval) {
+      l_bound <- minval
+    }
+    if (!is.null(maxval) && u_bound > maxval) {
+      u_bound <- maxval
+    }
+
+    trimmed_weights <- weights
+    trimmed_weights[trimmed_weights < l_bound] <- l_bound
+    trimmed_weights[trimmed_weights > u_bound] <- u_bound
+  }
+
+  # --- 3. Run Diagnostics ---
+  if (isTRUE(print_output)) {
+    cat("\n--- Trimming Diagnostic Report (Vector Output) ---\n")
+    cat("\n[1] Tiles (Quantiles):\n")
+    print(svy_tiles(trimmed_weights), n = Inf)
+    cat("\n[2] Stats (DEFF, ESS, MOE):\n")
+    print(svy_stats(trimmed_weights), n = Inf)
+    cat("---------------------------------------------\n\n")
+  }
+
+  # --- 4. Final Return ---
+  return(trimmed_weights)
 }
 
 # Add utils::globalVariables call to silence CHECK notes

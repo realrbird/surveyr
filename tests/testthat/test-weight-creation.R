@@ -178,3 +178,41 @@ test_that("svy_rake_optimize finds solution for max DEFF and Ratio", {
   stats_ratio <- svy_stats(optimized_weights_ratio)
   expect_lte(stats_ratio$wt_ratio, 20.5)
 })
+
+# -------------------------------------------------------------------
+# Unit Tests for svy_trim_vector
+# -------------------------------------------------------------------
+
+test_that("svy_trim_vector executes correctly and handles ... arguments like minval/maxval", {
+  w <- c(0.1, 0.5, 1.0, 2.5, 5.0)
+
+  # Set normalize = FALSE to test strict mathematical caps without rescaling
+  w_trim <- svy_trim_vector(w, minval = 0.2, maxval = 2.0, normalize = FALSE, print_output = FALSE)
+
+  expect_equal(length(w_trim), 5)
+  expect_true(all(w_trim >= 0.2))
+  expect_true(all(w_trim <= 2.0))
+  # Center values should remain completely untouched
+  expect_equal(w_trim[2:3], c(0.5, 1.0))
+})
+
+test_that("svy_trim_vector catches invalid inputs", {
+  w_valid <- 1:10
+
+  # Non-numeric weights
+  expect_error(svy_trim_vector(c("A", "B", "C")), "`weights` must be a numeric vector.")
+
+  # Invalid quantiles
+  expect_error(svy_trim_vector(w_valid, lower_quantile = 1.5), "Quantiles must be numeric")
+  expect_error(svy_trim_vector(w_valid, lower_quantile = 0.99, upper_quantile = 0.01), "lower_quantile must be less than upper_quantile")
+})
+
+test_that("svy_trim_vector printing respects print_output flag", {
+  w <- 1:100
+
+  # Check that it prints the expected headers
+  expect_output(svy_trim_vector(w, print_output = TRUE), "Trimming Diagnostic Report \\(Vector Output\\)")
+
+  # Check silent operation
+  expect_silent(svy_trim_vector(w, print_output = FALSE))
+})
