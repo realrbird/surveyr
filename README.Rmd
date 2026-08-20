@@ -13,12 +13,6 @@ knitr::opts_chunk$set(
 )
 ```
 
-# surveyr
-
-<!-- badges: start -->
-[![R-CMD-check](https://github.com/realrbird/surveyr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/realrbird/surveyr/actions/workflows/R-CMD-check.yaml)
-<!-- badges: end -->
-
 ## Overview
 
 `surveyr` provides a robust, streamlined toolkit for survey methodology, data processing pipelines, and statistical programming in R. It is designed to simplify the complex workflows associated with survey weighting, raking, and diagnostics, making it easier to prepare representative sample data for analysis.

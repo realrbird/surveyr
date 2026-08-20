@@ -1,13 +1,6 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-# surveyr
-
-<!-- badges: start -->
-
-[![R-CMD-check](https://github.com/realrbird/surveyr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/realrbird/surveyr/actions/workflows/R-CMD-check.yaml)
-<!-- badges: end -->
-
 ## Overview
 
 `surveyr` provides a robust, streamlined toolkit for survey methodology,
