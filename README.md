@@ -5,41 +5,79 @@
 
 <!-- badges: start -->
 
+[![R-CMD-check](https://github.com/realrbird/surveyr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/realrbird/surveyr/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
-The goal of surveyr is to …
+## Overview
+
+`surveyr` provides a robust, streamlined toolkit for survey methodology,
+data processing pipelines, and statistical programming in R. It is
+designed to simplify the complex workflows associated with survey
+weighting, raking, and diagnostics, making it easier to prepare
+representative sample data for analysis.
 
 ## Installation
 
-You can install the development version of surveyr from
-[GitHub](https://github.com/) with:
+You can install the development version of `surveyr` from
+[GitHub](https://github.com/realrbird/surveyr) using `pak`:
 
 ``` r
 # install.packages("pak")
-pak::pak("realrbird/surveyr")
+pak::pkg_install("realrbird/surveyr")
 ```
 
-## Example
+## Usage
 
-This is a basic example which shows you how to solve a common problem:
+### Survey Raking and Trimming
 
-``` r
-# During package development, use devtools::load_all() instead of library()
-# This loads the package functions and data without requiring installation.
-devtools::load_all()
-#> ℹ Loading surveyr
+`surveyr` provides robust functions for weight generation and extreme
+weight management:
 
-# Example usage (we will write this function next!)
-# survey_df
-# target_list
-```
+- **`svy_rake()`**: Standard raking procedure with added features, like
+  printing the resulting diagnostics to make trimming easier.
+- **`svy_rake_optimize()`**: Optimized raking that allows the user to
+  set a maximum design effect and/or weight ratio.
+- **`svy_trim()`**: Trimming (Winsorization) of output weights to reduce
+  the influence of extreme values.
+- **`svy_trim_vector()`**: Applies strict mathematical caps on a
+  standalone vector without forcing weight rescaling.
 
-You’ll still need to render `README.Rmd` regularly, to keep `README.md`
-up-to-date. `devtools::build_readme()` is handy for this.
+### Survey Weight Diagnostics
 
-You can also embed plots, for example:
+Evaluating the quality and impact of survey weights is built directly
+into the toolkit:
 
-<img src="man/figures/README-pressure-1.png" width="100%" />
+- **`svy_stats()`**: Produces a tibble of various weight statistics,
+  such as design effect (DEFF), effective sample size (ESS), and margin
+  of error (MOE).
+- **`svy_comps()`**: Creates a nicely formatted table comparing weighted
+  and unweighted frequencies against demographic targets.
+- **`svy_diagnostics()`**: Full, comprehensive diagnostics for a single
+  survey weight.
+- **`svy_compare()`**: Compares the diagnostics of multiple weight
+  variables within the same dataset to one another.
+- **`svy_contrast()`**: Compares the diagnostics of multiple weight
+  variables across different datasets to one another.
 
-In that case, don’t forget to commit and push the resulting figure
-files, so they display on GitHub and CRAN.
+### Helper Functions
+
+`surveyr` provides various utilities to make working with, cleaning, and
+preparing survey data simpler:
+
+- **`svy_normalize()`**: Normalizes weights so they sum perfectly to the
+  unweighted number of cases in the data.
+- **`svy_projection()`**: Projects weights to match actual population
+  counts.
+- **`svy_impute()`**: Imputation with added features, such as creating
+  new variables instead of overwriting existing ones and allowing the
+  user to specify custom names.
+- **`svy_check()`**: Runs structural checks to ensure everything is
+  properly set up before the weighting algorithm runs.
+- **`svy_create_joint_var()`**: Combines multiple factor variables into
+  a single joint factor variable for complex raking targets.
+
+## Getting Help
+
+If you encounter a clear bug, please file an issue with a minimal
+reproducible example on
+[GitHub](https://github.com/realrbird/surveyr/issues).
