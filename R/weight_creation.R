@@ -64,6 +64,23 @@ svy_rake <- function(df, targets, base_weight = 1, print_output = TRUE, ...) {
     stop("The 'pewmethods' package is required for svy_rake. Please install it.", call. = FALSE)
   }
 
+  # --- Base Weight Message Flags ---
+  msg_missing     <- missing(base_weight)
+  msg_explicit_1  <- !msg_missing && is.numeric(base_weight) && length(base_weight) == 1 && base_weight == 1
+  msg_single_val  <- FALSE
+  msg_not_found   <- FALSE
+  msg_not_numeric <- FALSE
+
+  if (!msg_missing && is.character(base_weight) && length(base_weight) == 1) {
+    if (!base_weight %in% names(df)) {
+      msg_not_found <- TRUE
+    } else if (!is.numeric(df[[base_weight]])) {
+      msg_not_numeric <- TRUE
+    } else if (length(unique(df[[base_weight]])) == 1) {
+      msg_single_val <- TRUE
+    }
+  }
+
   # --- 1. Validation and Base Weight Preparation ---
   # Assuming chk_target_structure and chk_numeric_no_na are available in the package environment
   chk_target_structure(targets, df)
@@ -127,6 +144,21 @@ svy_rake <- function(df, targets, base_weight = 1, print_output = TRUE, ...) {
     print(diag_report$comps, n = Inf)
     cat("---------------------------------------------\n\n")
   }
+
+  # --- Print Base Weight Messages at the End ---
+  if (msg_missing) {
+    message("\n[Base Weight Note] `base_weight` was not specified. Defaulting to 1 for all cases.")
+  } else if (msg_explicit_1) {
+    message("\n[Base Weight Note] `base_weight` was explicitly set to 1. All cases share the same starting weight.")
+  } else if (msg_not_found) {
+    message(sprintf("\n[Base Weight Note] Specified `base_weight` '%s' was not found in the dataset.", base_weight))
+  } else if (msg_not_numeric) {
+    message(sprintf("\n[Base Weight Note] Specified `base_weight` '%s' is not numeric.", base_weight))
+  } else if (msg_single_val) {
+    message(sprintf("\n[Base Weight Note] Specified `base_weight` '%s' contains only one unique value.", base_weight))
+  }
+
+  # --> YOUR EXISTING RETURN STATEMENT OR FINAL OBJECT GOES HERE <--
 
   # --- 5. Final Return ---
   return(final_weights)
@@ -274,6 +306,23 @@ svy_rake_with_trim <- function(df,
   # --- 1. Validation Checks (Using existing utilities) ---
   chk_target_structure(targets, df)
 
+  # --- Base Weight Message Flags ---
+  msg_missing     <- missing(base_weight)
+  msg_explicit_1  <- !msg_missing && is.numeric(base_weight) && length(base_weight) == 1 && base_weight == 1
+  msg_single_val  <- FALSE
+  msg_not_found   <- FALSE
+  msg_not_numeric <- FALSE
+
+  if (!msg_missing && is.character(base_weight) && length(base_weight) == 1) {
+    if (!base_weight %in% names(df)) {
+      msg_not_found <- TRUE
+    } else if (!is.numeric(df[[base_weight]])) {
+      msg_not_numeric <- TRUE
+    } else if (length(unique(df[[base_weight]])) == 1) {
+      msg_single_val <- TRUE
+    }
+  }
+
   # Initialize the working weight
   # We need a temporary column name in the data frame to pass to svy_trim/svy_rake
   temp_wt_col <- "INTERNAL_ITER_WEIGHT"
@@ -373,6 +422,21 @@ svy_rake_with_trim <- function(df,
     cat("-------------------------------------\n\n")
   }
 
+  # --- Print Base Weight Messages at the End ---
+  if (msg_missing) {
+    message("\n[Base Weight Note] `base_weight` was not specified. Defaulting to 1 for all cases.")
+  } else if (msg_explicit_1) {
+    message("\n[Base Weight Note] `base_weight` was explicitly set to 1. All cases share the same starting weight.")
+  } else if (msg_not_found) {
+    message(sprintf("\n[Base Weight Note] Specified `base_weight` '%s' was not found in the dataset.", base_weight))
+  } else if (msg_not_numeric) {
+    message(sprintf("\n[Base Weight Note] Specified `base_weight` '%s' is not numeric.", base_weight))
+  } else if (msg_single_val) {
+    message(sprintf("\n[Base Weight Note] Specified `base_weight` '%s' contains only one unique value.", base_weight))
+  }
+
+  # --> YOUR EXISTING RETURN STATEMENT OR FINAL OBJECT GOES HERE <--
+
   return(final_weights)
 }
 
@@ -404,6 +468,30 @@ svy_rake_optimize <- function(df, targets, max_deff = NULL, max_wt_ratio = NULL,
   final_weights <- NULL
 
   cat(crayon::style("\n--- Starting Optimization Search ---\n", "bold"))
+
+  # --- Base Weight Message Flags for ... ---
+  args <- list(...)
+  msg_missing     <- !("base_weight" %in% names(args))
+  msg_explicit_1  <- FALSE
+  msg_single_val  <- FALSE
+  msg_not_found   <- FALSE
+  msg_not_numeric <- FALSE
+
+  if (!msg_missing) {
+    bw_val <- args$base_weight
+
+    if (is.numeric(bw_val) && length(bw_val) == 1 && bw_val == 1) {
+      msg_explicit_1 <- TRUE
+    } else if (is.character(bw_val) && length(bw_val) == 1) {
+      if (!bw_val %in% names(df)) {
+        msg_not_found <- TRUE
+      } else if (!is.numeric(df[[bw_val]])) {
+        msg_not_numeric <- TRUE
+      } else if (length(unique(df[[bw_val]])) == 1) {
+        msg_single_val <- TRUE
+      }
+    }
+  }
 
   # Loop downward from the start cap to the minimum cap
   while (current_cap >= max_weight_min) {
@@ -442,6 +530,21 @@ NA
     warning("Could not satisfy constraints even at minimum weight cap. Returning weights from lowest cap.", call. = FALSE)
     final_weights <- wts # Return the last attempt (strictest cap)
   }
+
+  # --- Print Base Weight Messages at the End ---
+  if (msg_missing) {
+    message("\n[Base Weight Note] `base_weight` was not specified. Defaulting to 1 for all cases.")
+  } else if (msg_explicit_1) {
+    message("\n[Base Weight Note] `base_weight` was explicitly set to 1. All cases share the same starting weight.")
+  } else if (msg_not_found) {
+    message(sprintf("\n[Base Weight Note] Specified `base_weight` '%s' was not found in the dataset.", args$base_weight))
+  } else if (msg_not_numeric) {
+    message(sprintf("\n[Base Weight Note] Specified `base_weight` '%s' is not numeric.", args$base_weight))
+  } else if (msg_single_val) {
+    message(sprintf("\n[Base Weight Note] Specified `base_weight` '%s' contains only one unique value.", args$base_weight))
+  }
+
+  # --> YOUR EXISTING RETURN STATEMENT OR FINAL OBJECT GOES HERE <--
 
   return(final_weights)
 }
